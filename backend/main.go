@@ -2,31 +2,41 @@ package main
 
 import (
 	"log"
+	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"quiz-backend/internal/auth"
+	"quiz-backend/internal/database"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	// Инициализация БД
+	database.Connect()
 
-	dsn := "host=localhost user=root password=secretpassword dbname=quiz_db port=5432 sslmode=disable"
+	// Настройка Gin
+	r := gin.Default()
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("Ошибка подключения к базе данных: %v", err)
+	// Настройка CORS для работы с React
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
+	// Регистрация маршрутов
+	api := r.Group("/api/v1")
+
+	// Подключаем домен авторизации
+	auth.RegisterRoutes(api.Group("/auth"))
+
+	// Запуск сервера
+	log.Println("Сервер запущен на порту 8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("Ошибка при запуске сервера: %v", err)
 	}
-
-	log.Println("Успешное подключение")
-
-	// Получаем базовый объект *sql.DB для проверки пинга
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Fatalf("Ошибка получения объекта БД: %v", err)
-	}
-
-	if err := sqlDB.Ping(); err != nil {
-		log.Fatalf("База данных не отвечает: %v", err)
-	}
-
-	log.Println("Пинг прошел успешно")
 }
