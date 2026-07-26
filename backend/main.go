@@ -7,6 +7,7 @@ import (
 	"quiz-backend/internal/auth"
 	"quiz-backend/internal/database"
 	"quiz-backend/internal/quiz"
+	"quiz-backend/internal/ws"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,9 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Инициализация глобального менеджера websockets
+	wsManager := ws.NewManager()
+
 	// Регистрация маршрутов
 	api := r.Group("/api/v1")
 
@@ -37,6 +41,9 @@ func main() {
 
 	// Подключаем домен квизов
 	quiz.RegisterRoutes(api.Group("/quizzes"))
+
+	// Регистрируем марш webSockets
+	ws.RegisterRoutes(api.Group("/ws"), wsManager)
 
 	// Запуск сервера
 	log.Println("Сервер запущен на порту 8080")
