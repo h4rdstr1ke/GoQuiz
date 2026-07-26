@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 type Role = 'organizer' | 'participant';
 
 export const Dashboard = () => {
-    const [role] = useState<Role>('participant'); // participant - втор роль
+    const [role] = useState<Role>('organizer'); // participant - втор роль
     const [roomCode, setRoomCode] = useState('');
     const navigate = useNavigate();
 
