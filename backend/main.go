@@ -6,6 +6,7 @@ import (
 
 	"quiz-backend/internal/auth"
 	"quiz-backend/internal/database"
+	"quiz-backend/internal/quiz"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -33,6 +34,9 @@ func main() {
 
 	// Подключаем домен авторизации
 	auth.RegisterRoutes(api.Group("/auth"))
+
+	// Подключаем домен квизов
+	quiz.RegisterRoutes(api.Group("/quizzes"))
 
 	// Запуск сервера
 	log.Println("Сервер запущен на порту 8080")
