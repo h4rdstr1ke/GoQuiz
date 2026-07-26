@@ -17,7 +17,7 @@ export const Dashboard = () => {
     };
 
     const handleCreateQuiz = () => {
-        alert('Тут откроется конструктор квизов');
+        navigate('/create-quiz');
     };
 
     return (

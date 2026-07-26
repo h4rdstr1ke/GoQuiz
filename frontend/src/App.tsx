@@ -3,6 +3,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Lobby } from './pages/Lobby';
 import { Quiz } from './pages/Quiz';
+import { CreateQuiz } from './pages/CreateQuiz';
 
 function App() {
   return (
@@ -10,7 +11,7 @@ function App() {
       <Routes>
         {/* По умолчанию перенаправляем на авторизацию */}
         <Route path="/" element={<Navigate to="/login" replace />} />
-
+        <Route path="/create-quiz" element={<CreateQuiz />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/lobby/:roomCode" element={<Lobby />} />
