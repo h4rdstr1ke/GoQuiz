@@ -100,3 +100,82 @@ func (h *Handler) UpdateQuiz(c *gin.Context) {
 
 	c.JSON(http.StatusOK, quiz)
 }
+
+type OptionInput struct {
+	OptionText string `json:"option_text" binding:"required"`
+	IsCorrect  bool   `json:"is_correct"`
+}
+
+type AddQuestionInput struct {
+	ContentText      string        `json:"content_text" binding:"required"`
+	Type             string        `json:"type" binding:"required"`
+	TimeLimitSeconds int           `json:"time_limit_seconds"`
+	Points           int           `json:"points"`
+	SortOrder        int           `json:"sort_order" binding:"required"`
+	Options          []OptionInput `json:"options"`
+}
+
+// AddQuestion добавляет вопрос и его варианты в квиз
+func (h *Handler) AddQuestion(c *gin.Context) {
+	quizIDStr := c.Param("id")
+	userIDStr := c.MustGet("userID").(string)
+
+	var input AddQuestionInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверные данные вопроса"})
+		return
+	}
+
+	// Проверяем существует ли квиз и принадлежит ли он текущему юзеру
+	var quiz models.Quiz
+	if err := database.DB.Where("id = ? AND creator_id = ?", quizIDStr, userIDStr).First(&quiz).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Квиз не найден или нет прав на редактирование"})
+		return
+	}
+
+	quizUUID, _ := uuid.Parse(quizIDStr)
+
+	//  Транзакция (если варианты не сохранятся, вопрос тоже откатится)
+	tx := database.DB.Begin()
+
+	question := models.Question{
+		QuizID:           quizUUID,
+		ContentText:      input.ContentText,
+		Type:             models.QuestionType(input.Type),
+		TimeLimitSeconds: input.TimeLimitSeconds,
+		Points:           input.Points,
+		SortOrder:        input.SortOrder,
+	}
+
+	if err := tx.Create(&question).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при создании вопроса"})
+		return
+	}
+
+	// Сохраняем варианты ответов (если это тестовый вопрос)
+	if input.Type != string(models.TypeText) && len(input.Options) > 0 {
+		var options []models.QuestionOption
+		for _, opt := range input.Options {
+			options = append(options, models.QuestionOption{
+				QuestionID: question.ID,
+				OptionText: opt.OptionText,
+				IsCorrect:  opt.IsCorrect,
+			})
+		}
+
+		if err := tx.Create(&options).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при сохранении вариантов ответов"})
+			return
+		}
+	}
+
+	// Подтверждаем транзакцию
+	tx.Commit()
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "Вопрос успешно добавлен",
+		"question": question,
+	})
+}
