@@ -73,6 +73,7 @@ type Question struct {
 	ContentText      string       `gorm:"not null" json:"contentText"`
 	ImageURL         *string      `json:"imageUrl,omitempty"` // Указатель для nullable полей
 	Type             QuestionType `gorm:"type:question_type;not null" json:"type"`
+	PointSystem      string       `gorm:"default:'fixed'" json:"pointSystem"` //'fixed' или 'time'
 	TimeLimitSeconds int          `gorm:"default:30" json:"timeLimitSeconds"`
 	Points           int          `gorm:"default:10" json:"points"`
 	SortOrder        int          `gorm:"not null" json:"sortOrder"`

@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	"quiz-backend/internal/database"
@@ -91,11 +92,14 @@ func (r *Room) Run() {
 				}
 
 				var safeOptions []SafeOption
-				for _, opt := range q.Options {
-					safeOptions = append(safeOptions, SafeOption{
-						ID:   opt.ID.String(),
-						Text: opt.OptionText,
-					})
+				// Для текстовых вопросов не шлем варианты
+				if q.Type != models.TypeText {
+					for _, opt := range q.Options {
+						safeOptions = append(safeOptions, SafeOption{
+							ID:   opt.ID.String(),
+							Text: opt.OptionText,
+						})
+					}
 				}
 
 				participantsCount := 0
@@ -121,6 +125,8 @@ func (r *Room) Run() {
 					Payload: map[string]interface{}{
 						"question_index":     r.CurrentQuestionIndex,
 						"question_text":      q.ContentText,
+						"image_url":          q.ImageURL,
+						"type":               q.Type,
 						"options":            safeOptions,
 						"time_limit":         timeLeft, // Передаем оставшееся время
 						"total_participants": participantsCount,
@@ -280,19 +286,77 @@ func (r *Room) Run() {
 				q := r.Questions[r.CurrentQuestionIndex]
 				isCorrect := false
 
-				// Ищем выбранный вариант ответа среди опций вопроса
-				for _, opt := range q.Options {
-					if opt.ID.String() == answer.AnswerID {
-						isCorrect = opt.IsCorrect
-						break
+				// --- ЛОГИКА ПРОВЕРКИ РАЗНЫХ ТИПОВ ОТВЕТОВ ---
+				switch q.Type {
+				case models.TypeSingleChoice:
+					if len(answer.AnswerIDs) > 0 {
+						for _, opt := range q.Options {
+							if opt.ID.String() == answer.AnswerIDs[0] {
+								isCorrect = opt.IsCorrect
+								break
+							}
+						}
+					}
+				case models.TypeMultipleChoice:
+					// Собираем мапу правильных ответов
+					correctIDs := make(map[string]bool)
+					for _, opt := range q.Options {
+						if opt.IsCorrect {
+							correctIDs[opt.ID.String()] = true
+						}
+					}
+					// Сравниваем количество и сами ответы
+					if len(answer.AnswerIDs) > 0 && len(answer.AnswerIDs) == len(correctIDs) {
+						isCorrect = true
+						for _, id := range answer.AnswerIDs {
+							if !correctIDs[id] {
+								isCorrect = false
+								break
+							}
+						}
+					}
+				case models.TypeText:
+					// Очищаем от пробелов и приводим к нижнему регистру
+					submittedText := strings.TrimSpace(strings.ToLower(answer.AnswerText))
+					for _, opt := range q.Options {
+						if strings.TrimSpace(strings.ToLower(opt.OptionText)) == submittedText {
+							isCorrect = true
+							break
+						}
+					}
+				}
+
+				// --- СИСТЕМА НАЧИСЛЕНИЯ БАЛЛОВ ---
+				pointsEarned := 0
+				if isCorrect {
+					if q.PointSystem == "time" {
+						// Динамическая система: чем быстрее, тем больше баллов
+						elapsed := time.Since(r.QuestionStartedAt).Seconds()
+						timeLeft := float64(q.TimeLimitSeconds) - elapsed
+						if timeLeft < 0 {
+							timeLeft = 0
+						}
+
+						multiplier := timeLeft / float64(q.TimeLimitSeconds)
+						pointsEarned = int(float64(q.Points) * multiplier)
+
+						// Минимум 10% от стоимости вопроса, даже если ответил на последней секунде
+						minPoints := int(float64(q.Points) * 0.1)
+						if pointsEarned < minPoints {
+							pointsEarned = minPoints
+						}
+					} else {
+						// Фиксированная система
+						pointsEarned = q.Points
 					}
 				}
 
 				// Если ответ верный, начисляем баллы по Username
-				if isCorrect {
-					r.Scores[cMsg.Client.Username] += 100
-				} else if _, exists := r.Scores[cMsg.Client.Username]; !exists {
-					r.Scores[cMsg.Client.Username] = 0 // Добавляем студента с 0 баллов, если он ошибся
+				r.Scores[cMsg.Client.Username] += pointsEarned
+
+				// Добавляем студента с 0 баллов, если он ошибся и его еще нет
+				if _, exists := r.Scores[cMsg.Client.Username]; !exists {
+					r.Scores[cMsg.Client.Username] = 0
 				}
 
 				// Формируем персональное сообщение с результатом
@@ -326,7 +390,7 @@ func (r *Room) Run() {
 					}
 				}
 
-				log.Printf("Игрок %s ответил %t, текущий счет: %d", cMsg.Client.Username, isCorrect, r.Scores[cMsg.Client.Username])
+				log.Printf("Игрок %s ответил %t (Баллов получено: %d), текущий счет: %d", cMsg.Client.Username, isCorrect, pointsEarned, r.Scores[cMsg.Client.Username])
 			}
 
 		case message := <-r.Broadcast:
@@ -374,11 +438,14 @@ func (r *Room) sendCurrentQuestion() {
 	}
 
 	var safeOptions []SafeOption
-	for _, opt := range q.Options {
-		safeOptions = append(safeOptions, SafeOption{
-			ID:   opt.ID.String(),
-			Text: opt.OptionText,
-		})
+	// Отправляем варианты только для тестов с выбором
+	if q.Type != models.TypeText {
+		for _, opt := range q.Options {
+			safeOptions = append(safeOptions, SafeOption{
+				ID:   opt.ID.String(),
+				Text: opt.OptionText,
+			})
+		}
 	}
 
 	// Считаем общее число участников (не организаторов) в комнате
@@ -394,6 +461,8 @@ func (r *Room) sendCurrentQuestion() {
 		Payload: map[string]interface{}{
 			"question_index":     r.CurrentQuestionIndex,
 			"question_text":      q.ContentText,
+			"image_url":          q.ImageURL, // Передаем картинку, если есть
+			"type":               q.Type,     // Передаем тип вопроса
 			"options":            safeOptions,
 			"time_limit":         q.TimeLimitSeconds,
 			"total_participants": participantsCount,

@@ -1,6 +1,7 @@
 package quiz
 
 import (
+	"log"
 	"net/http"
 
 	"quiz-backend/internal/database"
@@ -108,7 +109,9 @@ type OptionInput struct {
 
 type AddQuestionInput struct {
 	ContentText      string        `json:"content_text" binding:"required"`
+	ImageURL         *string       `json:"image_url"` // НОВОЕ
 	Type             string        `json:"type" binding:"required"`
+	PointSystem      string        `json:"point_system"` // НОВОЕ
 	TimeLimitSeconds int           `json:"time_limit_seconds"`
 	Points           int           `json:"points"`
 	SortOrder        int           `json:"sort_order" binding:"required"`
@@ -126,7 +129,6 @@ func (h *Handler) AddQuestion(c *gin.Context) {
 		return
 	}
 
-	// Проверяем существует ли квиз и принадлежит ли он текущему юзеру
 	var quiz models.Quiz
 	if err := database.DB.Where("id = ? AND creator_id = ?", quizIDStr, userIDStr).First(&quiz).Error; err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Квиз не найден или нет прав на редактирование"})
@@ -134,14 +136,18 @@ func (h *Handler) AddQuestion(c *gin.Context) {
 	}
 
 	quizUUID, _ := uuid.Parse(quizIDStr)
-
-	//  Транзакция (если варианты не сохранятся, вопрос тоже откатится)
 	tx := database.DB.Begin()
+
+	if input.PointSystem == "" {
+		input.PointSystem = "fixed"
+	}
 
 	question := models.Question{
 		QuizID:           quizUUID,
 		ContentText:      input.ContentText,
+		ImageURL:         input.ImageURL,
 		Type:             models.QuestionType(input.Type),
+		PointSystem:      input.PointSystem,
 		TimeLimitSeconds: input.TimeLimitSeconds,
 		Points:           input.Points,
 		SortOrder:        input.SortOrder,
@@ -149,12 +155,12 @@ func (h *Handler) AddQuestion(c *gin.Context) {
 
 	if err := tx.Create(&question).Error; err != nil {
 		tx.Rollback()
+		log.Printf("Ошибка БД при создании вопроса: %v", err) // НОВОЕ: Логируем ошибку БД
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при создании вопроса"})
 		return
 	}
 
-	// Сохраняем варианты ответов (если это тестовый вопрос)
-	if input.Type != string(models.TypeText) && len(input.Options) > 0 {
+	if len(input.Options) > 0 {
 		var options []models.QuestionOption
 		for _, opt := range input.Options {
 			options = append(options, models.QuestionOption{
@@ -166,12 +172,12 @@ func (h *Handler) AddQuestion(c *gin.Context) {
 
 		if err := tx.Create(&options).Error; err != nil {
 			tx.Rollback()
+			log.Printf("Ошибка БД при сохранении вариантов: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при сохранении вариантов ответов"})
 			return
 		}
 	}
 
-	// Подтверждаем транзакцию
 	tx.Commit()
 
 	c.JSON(http.StatusCreated, gin.H{

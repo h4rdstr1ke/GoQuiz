@@ -24,8 +24,10 @@ interface OrganizerHistoryItem {
 
 export const Dashboard = () => {
     const [role] = useState<Role>((localStorage.getItem('role') as Role) || 'participant'); 
-    const [roomCode, setRoomCode] = useState('');
     
+    const [username] = useState<string>(localStorage.getItem('username') || 'Студент'); 
+    
+    const [roomCode, setRoomCode] = useState('');
     const [activeRoomCode] = useState<string | null>(localStorage.getItem('currentRoomCode'));
     
     // Состояния данных
@@ -152,7 +154,7 @@ export const Dashboard = () => {
         }
     };
 
-    // --- НОВОЕ: Обработчик для кнопки "Перейти" в активную игру ---
+    // --- Обработчик для кнопки "Перейти" в активную игру ---
     const handleResumeGame = () => {
         if (activeRoomCode) {
             navigate(`/lobby/${activeRoomCode}?role=${role}`);
@@ -172,7 +174,7 @@ export const Dashboard = () => {
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900">Личный кабинет</h1>
                         <p className="text-gray-500">
-                            Вы вошли как: <span className="font-semibold text-indigo-600">{role === 'organizer' ? 'Организатор' : 'Участник'}</span>
+                            Вы вошли как: <span className="font-semibold text-indigo-600">{username} ({role === 'organizer' ? 'Организатор' : 'Участник'})</span>
                         </p>
                     </div>
                     <button
@@ -183,7 +185,7 @@ export const Dashboard = () => {
                     </button>
                 </header>
 
-                {/* --- НОВОЕ: Плашка активной игры, если она есть --- */}
+                {/* --- Плашка активной игры, если она есть --- */}
                 {activeRoomCode && (
                     <div className="mb-8 flex items-center justify-between rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white shadow-lg">
                         <div>

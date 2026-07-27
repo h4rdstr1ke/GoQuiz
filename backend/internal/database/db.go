@@ -22,8 +22,17 @@ func Connect() {
 	}
 
 	// --- АВТОМИГРАЦИЯ ---
-	if err := DB.AutoMigrate(&models.GameResult{}); err != nil {
-		log.Printf("Ошибка миграции таблицы GameResult: %v", err)
+	if err := DB.AutoMigrate(
+		&models.User{},
+		&models.Quiz{},
+		&models.Question{},
+		&models.QuestionOption{},
+		&models.QuizSession{},
+		&models.SessionParticipant{},
+		&models.ParticipantAnswer{},
+		&models.GameResult{},
+	); err != nil {
+		log.Printf("Ошибка миграции: %v", err)
 	}
 
 	log.Println("Успешное подключение к PostgreSQL")

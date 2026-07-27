@@ -15,6 +15,8 @@ interface Question {
     type: QuestionType;
     timeLimit: number;
     points: number;
+    pointSystem: 'fixed' | 'time'; // Система баллов
+    imageUrl: string;              // Ссылка на изображение
     options: Option[];
 }
 
@@ -34,6 +36,8 @@ export const CreateQuiz = () => {
             type: 'single_choice',
             timeLimit: 30,
             points: 100,
+            pointSystem: 'fixed', // По умолчанию фиксированные
+            imageUrl: '',
             options: [{ id: '1-1', text: '', isCorrect: false }]
         }
     ]);
@@ -50,6 +54,8 @@ export const CreateQuiz = () => {
                 type: 'single_choice',
                 timeLimit: 30,
                 points: 100,
+                pointSystem: 'fixed',
+                imageUrl: '',
                 options: [{ id: `${newId}-1`, text: '', isCorrect: false }]
             }
         ]);
@@ -142,14 +148,19 @@ export const CreateQuiz = () => {
                 // под структуру (AddQuestionInput)
                 const questionPayload = {
                     content_text: q.text,
+                    image_url: q.imageUrl.trim() !== '' ? q.imageUrl.trim() : null, 
                     type: q.type,
+                    point_system: q.pointSystem, 
                     time_limit_seconds: q.timeLimit,
                     points: q.points,
                     sort_order: i + 1,
                     options: q.type !== 'text' ? q.options.map(opt => ({
                         option_text: opt.text,
                         is_correct: opt.isCorrect
-                    })) : []
+                    })) : q.options.map(opt => ({
+                        option_text: opt.text,
+                        is_correct: true 
+                    }))
                 };
 
                 const qRes = await fetch(`http://localhost:8080/api/v1/quizzes/${quizId}/questions`, {
@@ -222,7 +233,7 @@ export const CreateQuiz = () => {
                             <div className="mb-4 flex flex-wrap items-center justify-between border-b pb-4 gap-4">
                                 <h3 className="text-lg font-semibold">Вопрос {index + 1}</h3>
                                 
-                                <div className="flex gap-4 items-center">
+                                <div className="flex gap-4 items-center flex-wrap">
                                     <div className="flex items-center gap-2">
                                         <label className="text-sm text-gray-600">Время (сек):</label>
                                         <input
@@ -235,11 +246,21 @@ export const CreateQuiz = () => {
                                     <select
                                         value={q.type}
                                         onChange={(e) => handleQuestionChange(q.id, 'type', e.target.value)}
-                                        className="rounded-md border border-gray-300 p-1 text-sm focus:border-indigo-500 focus:outline-none"
+                                        className="rounded-md border border-gray-300 p-1 text-sm focus:border-indigo-500 focus:outline-none bg-gray-50"
                                     >
                                         <option value="single_choice">Один ответ</option>
                                         <option value="multiple_choice">Несколько ответов</option>
                                         <option value="text">Текстовый ввод</option>
+                                    </select>
+                                    
+                                    {/* Выбор системы баллов */}
+                                    <select
+                                        value={q.pointSystem}
+                                        onChange={(e) => handleQuestionChange(q.id, 'pointSystem', e.target.value)}
+                                        className="rounded-md border border-gray-300 p-1 text-sm focus:border-indigo-500 focus:outline-none bg-indigo-50 text-indigo-700 font-medium"
+                                    >
+                                        <option value="fixed">Фикс. баллы</option>
+                                        <option value="time">Баллы от времени</option>
                                     </select>
                                 </div>
                             </div>
@@ -251,9 +272,32 @@ export const CreateQuiz = () => {
                                 placeholder="Введите текст вопроса..."
                                 className="mb-4 w-full rounded-lg border border-gray-300 px-4 py-2 font-medium focus:border-indigo-500 focus:outline-none"
                             />
+                            
+                            {/* Ввод ссылки на картинку */}
+                            <div className="mb-6">
+                                <input
+                                    type="text"
+                                    value={q.imageUrl}
+                                    onChange={(e) => handleQuestionChange(q.id, 'imageUrl', e.target.value)}
+                                    placeholder="Ссылка на изображение (необязательно)..."
+                                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 focus:border-indigo-500 focus:outline-none bg-gray-50"
+                                />
+                                {/* Предпросмотр картинки, если ссылка введена */}
+                                {q.imageUrl && (
+                                    <div className="mt-2 flex justify-center bg-gray-100 rounded-lg p-2 border border-dashed border-gray-300">
+                                        <img 
+                                            src={q.imageUrl} 
+                                            alt="Предпросмотр" 
+                                            className="max-h-32 object-contain rounded"
+                                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                                            onLoad={(e) => (e.currentTarget.style.display = 'block')}
+                                        />
+                                    </div>
+                                )}
+                            </div>
 
                             {(q.type === 'single_choice' || q.type === 'multiple_choice') && (
-                                <div className="space-y-2">
+                                <div className="space-y-2 border-t pt-4 border-gray-100">
                                     {q.options.map((opt) => (
                                         <div key={opt.id} className="flex items-center gap-3">
                                             <input
@@ -277,6 +321,30 @@ export const CreateQuiz = () => {
                                         className="mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-800"
                                     >
                                         + Добавить вариант
+                                    </button>
+                                </div>
+                            )}
+
+                            {q.type === 'text' && (
+                                <div className="border-t pt-4 border-gray-100">
+                                    <p className="mb-2 text-sm text-gray-500">Добавьте допустимые варианты правильного ответа (без учета регистра):</p>
+                                    {q.options.map((opt) => (
+                                        <div key={opt.id} className="flex items-center gap-3 mb-2">
+                                            <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs">✓</div>
+                                            <input
+                                                type="text"
+                                                value={opt.text}
+                                                onChange={(e) => handleOptionTextChange(q.id, opt.id, e.target.value)}
+                                                placeholder="Правильный ответ..."
+                                                className="flex-1 rounded border border-gray-300 px-3 py-1 focus:border-indigo-500 focus:outline-none"
+                                            />
+                                        </div>
+                                    ))}
+                                    <button
+                                        onClick={() => handleAddOption(q.id)}
+                                        className="mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                                    >
+                                        + Добавить синоним / альтернативный вариант
                                     </button>
                                 </div>
                             )}

@@ -35,9 +35,10 @@ type PlayerJoinedPayload struct {
 	Role     string `json:"role"`
 }
 
-// SubmitAnswerPayload — то, что присылает игрок при ответе
+// НОВОЕ: SubmitAnswerPayload принимает массивы и текст
 type SubmitAnswerPayload struct {
-	AnswerID string `json:"answer_id"`
+	AnswerIDs  []string `json:"answer_ids,omitempty"`  // Для single и multiple
+	AnswerText string   `json:"answer_text,omitempty"` // Для текстового ввода
 }
 
 // AnswerResultPayload — то, что сервер отвечает игроку
