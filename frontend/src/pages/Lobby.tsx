@@ -20,8 +20,11 @@ export const Lobby = () => {
     const roleParam = searchParams.get('role') as Role | null;
     const role: Role = roleParam || 'organizer';
     
+    // Сначала ищем в URL, затем в localStorage, и только потом применяем заглушку
+    const savedUsername = localStorage.getItem('username');
     const defaultName = role === 'organizer' ? 'Преподаватель' : `Студент-${Math.floor(Math.random() * 100)}`;
-    const username = searchParams.get('name') || defaultName;
+    
+    const username = searchParams.get('name') || savedUsername || defaultName;
 
     const [players, setPlayers] = useState<Player[]>([]);
 
@@ -48,10 +51,10 @@ export const Lobby = () => {
 
             case 'game_started':
             case 'question_show': // Защита: переходим при любом из этих событий, чтобы никого не оставило в лобби
-                navigate(`/quiz/${roomCode}`);
+                navigate(`/quiz/${roomCode}?role=${role}`);
                 break;
         }
-    }, [lastMessage, navigate, roomCode]);
+    }, [lastMessage, navigate, roomCode, role]);
 
     const handleStartGame = () => {
         sendMessage('game_started');

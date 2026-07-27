@@ -18,6 +18,7 @@ const (
 	EventError         EventType = "error"
 
 	EventLeaderboardUpdate EventType = "leaderboard_update"
+	EventPlayerAnswered    EventType = "player_answered"
 )
 
 // Универсальная обертка для всех WebSocket сообщений

@@ -48,6 +48,9 @@ export const Quiz = () => {
     const [leaderboard, setLeaderboard] = useState<Record<string, number>>({});
     const [isGameCompleted, setIsGameCompleted] = useState(false);
 
+    const [answeredPlayers, setAnsweredPlayers] = useState<string[]>([]);
+    const [totalParticipants, setTotalParticipants] = useState(0);
+
     // --- Обработка сообщений от сервера ---
     useEffect(() => {
         if (!lastMessage) return;
@@ -71,6 +74,20 @@ export const Quiz = () => {
                 setTimeLeft(payload.time_limit || 20); 
                 setSelectedOption(null); // Сбрасываем выбранный ответ
                 setAnswerResult(null);   // Сбрасываем результат прошлого вопроса
+                
+                // Сбрасываем список ответивших на новый вопрос и обновляем общее число участников
+                setAnsweredPlayers([]);
+                setTotalParticipants(payload.total_participants || 0);
+                break;
+
+            case 'player_answered':
+               
+                setAnsweredPlayers(prev => {
+                    if (!prev.includes(lastMessage.payload)) {
+                        return [...prev, lastMessage.payload];
+                    }
+                    return prev;
+                });
                 break;
 
             case 'answer_result':
@@ -245,8 +262,21 @@ export const Quiz = () => {
                     /* Интерфейс организатора */
                     <div className="flex flex-col items-center flex-1 w-full max-w-2xl mx-auto">
                         {timeLeft > 0 ? (
-                            <div className="flex flex-1 flex-col items-center justify-center text-2xl text-gray-400 font-medium animate-pulse">
-                                Ожидаем ответы участников...
+                            <div className="flex flex-col items-center justify-center w-full flex-1">
+                                <div className="text-xl text-gray-600 font-medium mb-6">
+                                    Ответили: <span className="font-bold text-indigo-600">{answeredPlayers.length}</span> из <span className="font-bold">{totalParticipants}</span>
+                                </div>
+
+                                {/* Плашки с именами тех, кто уже ответил */}
+                                {answeredPlayers.length > 0 && (
+                                    <div className="flex flex-wrap justify-center gap-3 w-full max-w-lg mb-8">
+                                        {answeredPlayers.map((name, idx) => (
+                                            <div key={idx} className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-xl font-semibold shadow-sm animate-fade-in-up">
+                                                <span>✓</span> {name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="w-full bg-white rounded-2xl shadow-sm p-6 mb-8 animate-fade-in-up">
@@ -271,14 +301,17 @@ export const Quiz = () => {
                             </div>
                         )}
 
-                        {timeLeft === 0 && (
-                            <button
-                                onClick={handleNextQuestion}
-                                className="mt-auto w-full rounded-2xl bg-indigo-600 py-5 text-xl font-bold text-white shadow-lg hover:bg-indigo-700 transition-transform hover:-translate-y-1"
-                            >
-                                Следующий вопрос →
-                            </button>
-                        )}
+                        {/* Кнопка доступна всегда */}
+                        <button
+                            onClick={handleNextQuestion}
+                            className={`mt-auto w-full rounded-2xl py-5 text-xl font-bold text-white shadow-lg transition-transform hover:-translate-y-1 ${
+                                timeLeft === 0 
+                                ? 'bg-indigo-600 hover:bg-indigo-700' 
+                                : 'bg-gray-400 hover:bg-gray-500'
+                            }`}
+                        >
+                            {timeLeft === 0 ? 'Следующий вопрос →' : 'Пропустить таймер'}
+                        </button>
                     </div>
                 )}
             </main>

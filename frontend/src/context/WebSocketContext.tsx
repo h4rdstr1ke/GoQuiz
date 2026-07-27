@@ -11,6 +11,7 @@ export type EventType =
   | 'submit_answer'
   | 'next_question'
   | 'leaderboard_update'
+  | 'player_answered' 
   | 'error';
 
 export interface WsMessage {

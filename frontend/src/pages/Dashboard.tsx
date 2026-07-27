@@ -1,31 +1,64 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// Временный тип
 type Role = 'organizer' | 'participant';
 
 interface Quiz {
     id: string;
     title: string;
-    questionsCount: number;
+    // Бэкенд может не возвращать количество вопросов сразу (если мы не делали Preload), 
+    // поэтому пока сделаем это поле необязательным
+    questionsCount?: number; 
 }
 
-// Заглушка списка квизов
-// 
-const MOCK_QUIZZES: Quiz[] = [
-    { id: '274a4b78-abaf-4387-b394-8642642d4b82', title: 'Основы Golang', questionsCount: 10 },
-    { id: 'fdfd', title: 'React Hooks и Контекст', questionsCount: 5 },
-];
-
 export const Dashboard = () => {
-    const [role] = useState<Role>('organizer'); 
+    const [role] = useState<Role>((localStorage.getItem('role') as Role) || 'participant'); 
     const [roomCode, setRoomCode] = useState('');
     
-    // Состояния для загрузки и ошибок API
+    // Состояния для квизов, загрузки и ошибок API
+    const [quizzes, setQuizzes] = useState<Quiz[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isFetchingQuizzes, setIsFetchingQuizzes] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
     const navigate = useNavigate();
+
+    // --- Загрузка реальных квизов с бэкенда ---
+    useEffect(() => {
+        if (role === 'organizer') {
+            const fetchQuizzes = async () => {
+                setIsFetchingQuizzes(true);
+                try {
+                    const token = localStorage.getItem('token');
+                    const response = await fetch('http://localhost:8080/api/v1/quizzes/', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    if (!response.ok) throw new Error('Не удалось загрузить список квизов');
+                    
+                    const data = await response.json();
+                    
+                    // Адаптируем данные под наш интерфейс
+                    const formattedQuizzes = data.map((q: any) => ({
+                        id: q.ID || q.id,
+                        title: q.title,
+                        questionsCount: q.questions ? q.questions.length : 0 
+                    }));
+                    
+                    setQuizzes(formattedQuizzes);
+                } catch (err: any) {
+                    console.error(err);
+                    setError(err.message);
+                } finally {
+                    setIsFetchingQuizzes(false);
+                }
+            };
+
+            fetchQuizzes();
+        }
+    }, [role]);
 
     const handleJoinRoom = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -43,10 +76,12 @@ export const Dashboard = () => {
         setError(null);
 
         try {
+            const token = localStorage.getItem('token');
             const response = await fetch('http://localhost:8080/api/v1/ws/create', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` // Не забываем токен и тут!
                 },
                 body: JSON.stringify({ quiz_id: quizId }),
             });
@@ -57,7 +92,6 @@ export const Dashboard = () => {
 
             const data = await response.json();
             
-            // Перенаправляем преподавателя в лобби с правами организатора.
             if (data.room_code) {
                 navigate(`/lobby/${data.room_code}?role=organizer`);
             }
@@ -69,8 +103,13 @@ export const Dashboard = () => {
         }
     };
 
+    const handleLogout = () => {
+        localStorage.clear();
+        navigate('/login');
+    };
+
     return (
-        <div className="min-h-screen bg-gray-100 p-8">
+        <div className="min-h-screen bg-gray-100 p-8 font-sans">
             <div className="mx-auto max-w-5xl">
 
                 {/* Шапка */}
@@ -82,7 +121,7 @@ export const Dashboard = () => {
                         </p>
                     </div>
                     <button
-                        onClick={() => navigate('/login')}
+                        onClick={handleLogout}
                         className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                         Выйти
@@ -129,7 +168,7 @@ export const Dashboard = () => {
                         )}
                     </section>
 
-                    {/* Правая колонка: История или список квизов */}
+                    {/* Правая колонка: Список реальных квизов */}
                     <section className="flex flex-col rounded-xl bg-white p-6 shadow-sm">
                         <h2 className="mb-4 text-xl font-semibold">
                             {role === 'organizer' ? 'Мои квизы' : 'История участия'}
@@ -142,21 +181,35 @@ export const Dashboard = () => {
                                         {error}
                                     </div>
                                 )}
-                                {MOCK_QUIZZES.map((quiz) => (
-                                    <div key={quiz.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30">
-                                        <div>
-                                            <h3 className="font-semibold text-gray-800">{quiz.title}</h3>
-                                            <p className="text-sm text-gray-500">{quiz.questionsCount} вопросов</p>
-                                        </div>
-                                        <button
-                                            onClick={() => handleCreateRoom(quiz.id)}
-                                            disabled={isLoading}
-                                            className="rounded-lg bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-200 transition-colors disabled:opacity-50"
-                                        >
-                                            {isLoading ? 'Запуск...' : 'Начать игру'}
-                                        </button>
+                                
+                                {isFetchingQuizzes ? (
+                                    <div className="flex justify-center p-8 text-gray-400">
+                                        Загрузка квизов...
                                     </div>
-                                ))}
+                                ) : quizzes.length > 0 ? (
+                                    quizzes.map((quiz) => (
+                                        <div key={quiz.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30">
+                                            <div>
+                                                <h3 className="font-semibold text-gray-800">{quiz.title}</h3>
+                                                {/* Если бэкенд отдает вопросы, покажем их количество */}
+                                                {quiz.questionsCount !== undefined && quiz.questionsCount > 0 && (
+                                                    <p className="text-sm text-gray-500">{quiz.questionsCount} вопросов</p>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => handleCreateRoom(quiz.id)}
+                                                disabled={isLoading}
+                                                className="rounded-lg bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-200 transition-colors disabled:opacity-50"
+                                            >
+                                                {isLoading ? 'Запуск...' : 'Начать игру'}
+                                            </button>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 text-sm">
+                                        <p>У вас еще нет созданных квизов.</p>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 min-h-[160px]">

@@ -160,6 +160,20 @@ func (r *Room) Run() {
 				if bytes, err := json.Marshal(resultMsg); err == nil {
 					cMsg.Client.Send <- bytes
 				}
+
+				// Отправляем организаторам информацию о том что этот игрок ответил
+				answeredMsg := Message{
+					Type:    EventPlayerAnswered,
+					Payload: cMsg.Client.Username,
+				}
+				if ansBytes, err := json.Marshal(answeredMsg); err == nil {
+					for client := range r.Clients {
+						if client.Role == "organizer" {
+							client.Send <- ansBytes
+						}
+					}
+				}
+
 				// Отправляем обновленную таблицу лидеров всем организаторам
 				leaderboardMsg := Message{
 					Type:    EventLeaderboardUpdate,
@@ -225,12 +239,21 @@ func (r *Room) sendCurrentQuestion() {
 		})
 	}
 
+	// Считаем общее число участников (не организаторов) в комнате
+	participantsCount := 0
+	for c := range r.Clients {
+		if c.Role == "participant" {
+			participantsCount++
+		}
+	}
+
 	r.broadcastJSON(Message{
 		Type: EventQuestionShow,
 		Payload: map[string]interface{}{
-			"question_text": q.ContentText,
-			"options":       safeOptions,
-			"time_limit":    q.TimeLimitSeconds,
+			"question_text":      q.ContentText,
+			"options":            safeOptions,
+			"time_limit":         q.TimeLimitSeconds,
+			"total_participants": participantsCount,
 		},
 	})
 }
