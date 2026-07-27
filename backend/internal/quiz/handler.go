@@ -179,3 +179,35 @@ func (h *Handler) AddQuestion(c *gin.Context) {
 		"question": question,
 	})
 }
+
+// Структура ответа для фронтенда
+type HistoryResponse struct {
+	QuizTitle string `json:"quiz_title"`
+	Score     int    `json:"score"`
+	Place     int    `json:"place"`
+	PlayedAt  string `json:"played_at"`
+}
+
+// GetMyHistory — получение истории прохождения квизов текущего участника
+func (h *Handler) GetMyHistory(c *gin.Context) {
+	userIDStr := c.MustGet("userID").(string)
+
+	var results []models.GameResult
+	// Подтягиваем связанные квизы (Preload("Quiz")), чтобы получить название, и сортируем от новых к старым
+	if err := database.DB.Preload("Quiz").Where("user_id = ?", userIDStr).Order("created_at desc").Find(&results).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при получении истории"})
+		return
+	}
+
+	var history []HistoryResponse
+	for _, r := range results {
+		history = append(history, HistoryResponse{
+			QuizTitle: r.Quiz.Title,
+			Score:     r.Score,
+			Place:     r.Place,
+			PlayedAt:  r.CreatedAt.Format("02.01.2006 15:04"),
+		})
+	}
+
+	c.JSON(http.StatusOK, history)
+}

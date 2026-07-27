@@ -6,6 +6,10 @@ import (
 
 	"quiz-backend/internal/database"
 	"quiz-backend/models"
+
+	"sort"
+
+	"github.com/google/uuid"
 )
 
 // ClientMessage связывает конкретного отправителя с его сообщением
@@ -98,11 +102,62 @@ func (r *Room) Run() {
 				r.sendCurrentQuestion()
 
 			case EventNextQuestion:
+				// Игру может продолжить/завершить только организатор
 				if cMsg.Client.Role != "organizer" {
 					continue
 				}
 				r.CurrentQuestionIndex++
 				if r.CurrentQuestionIndex >= len(r.Questions) {
+					// --- СОХРАНЕНИЕ ИСТОРИИ ---
+					quizUUID, _ := uuid.Parse(r.QuizID)
+
+					// Список для сортировки, чтобы узнать места
+					type userScore struct {
+						Username string
+						Score    int
+					}
+					var sortedScores []userScore
+					for un, sc := range r.Scores {
+						sortedScores = append(sortedScores, userScore{Username: un, Score: sc})
+					}
+
+					// Сортируем от большего к меньшему
+					sort.Slice(sortedScores, func(i, j int) bool {
+						return sortedScores[i].Score > sortedScores[j].Score
+					})
+
+					// Запоминаем место каждого игрока
+					places := make(map[string]int)
+					for i, us := range sortedScores {
+						places[us.Username] = i + 1
+					}
+
+					// Сохраняем в базу данных
+					for client := range r.Clients {
+						if client.Role == "participant" {
+							score := r.Scores[client.Username]
+							place := places[client.Username] // Достаем вычисленное место
+
+							userUUID, err := uuid.Parse(client.UserID)
+							if err != nil {
+								log.Printf("Не удалось сохранить историю для %s: неверный формат UserID", client.Username)
+								continue
+							}
+
+							if err := database.DB.Create(&models.GameResult{
+								UserID: userUUID,
+								QuizID: quizUUID,
+								Score:  score,
+								Place:  place, // <-- Сохраняем место в БД!
+							}).Error; err != nil {
+								log.Printf("Ошибка записи в БД для %s: %v", client.Username, err)
+							} else {
+								log.Printf("История сохранена: %s (Счет: %d, Место: %d)", client.Username, score, place)
+							}
+						}
+					}
+					// --------------------------
+
 					r.broadcastJSON(Message{Type: EventGameCompleted, Payload: r.Scores})
 				} else {
 					r.sendCurrentQuestion()

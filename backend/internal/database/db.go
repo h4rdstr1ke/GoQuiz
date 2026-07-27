@@ -5,6 +5,8 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"quiz-backend/models"
 )
 
 // Глобальная переменная для бd
@@ -17,6 +19,11 @@ func Connect() {
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Ошибка подключения к базе данных: %v", err)
+	}
+
+	// --- АВТОМИГРАЦИЯ ---
+	if err := DB.AutoMigrate(&models.GameResult{}); err != nil {
+		log.Printf("Ошибка миграции таблицы GameResult: %v", err)
 	}
 
 	log.Println("Успешное подключение к PostgreSQL")

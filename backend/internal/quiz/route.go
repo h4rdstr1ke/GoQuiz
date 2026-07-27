@@ -17,5 +17,6 @@ func RegisterRoutes(router *gin.RouterGroup) {
 		protected.GET("/", h.GetMyQuizzes)
 		protected.PUT("/:id", h.UpdateQuiz)
 		protected.POST("/:id/questions", h.AddQuestion)
+		protected.GET("/history", h.GetMyHistory)
 	}
 }

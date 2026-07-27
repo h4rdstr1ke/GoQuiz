@@ -36,13 +36,25 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const connect = useCallback((roomCode: string, username: string, role: string) => {
 
-    // Предотвращаем множественные подключения (учитывая процесс коннекта и Strict Mode в React)
     if (ws.current?.readyState === WebSocket.OPEN || ws.current?.readyState === WebSocket.CONNECTING) {
         return;
     }
 
-    // Формируем URL для подключения (TODO из .env)
-    const url = `ws://localhost:8080/api/v1/ws/join/${roomCode}?username=${encodeURIComponent(username)}&role=${role}`;
+    // Достаем токен из хранилища и расшифровываем его, чтобы получить ID пользователя
+    const token = localStorage.getItem('token');
+    let userId = 'guest';
+    
+    if (token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            userId = payload.sub; 
+        } catch (error) {
+            console.error('Не удалось извлечь userID из токена:', error);
+        }
+    }
+
+    // Добавляем userId в URL
+    const url = `ws://localhost:8080/api/v1/ws/join/${roomCode}?username=${encodeURIComponent(username)}&role=${role}&userId=${userId}`;
     
     ws.current = new WebSocket(url);
 

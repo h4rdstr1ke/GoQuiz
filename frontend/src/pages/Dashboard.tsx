@@ -11,52 +11,77 @@ interface Quiz {
     questionsCount?: number; 
 }
 
+interface HistoryItem {
+    quiz_title: string;
+    score: number;
+    place: number;
+    played_at: string;
+}
+
 export const Dashboard = () => {
     const [role] = useState<Role>((localStorage.getItem('role') as Role) || 'participant'); 
     const [roomCode, setRoomCode] = useState('');
     
-    // Состояния для квизов, загрузки и ошибок API
+    // Состояния для квизов (организатор) и истории (участник)
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+    const [history, setHistory] = useState<HistoryItem[]>([]);
+    
+    // Состояния загрузки и ошибок API
     const [isLoading, setIsLoading] = useState(false);
-    const [isFetchingQuizzes, setIsFetchingQuizzes] = useState(false);
+    const [isFetchingData, setIsFetchingData] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
     const navigate = useNavigate();
 
-    // --- Загрузка реальных квизов с бэкенда ---
+    // --- Загрузка данных с бэкенда в зависимости от роли ---
     useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        setIsFetchingData(true);
+
         if (role === 'organizer') {
             const fetchQuizzes = async () => {
-                setIsFetchingQuizzes(true);
                 try {
-                    const token = localStorage.getItem('token');
                     const response = await fetch('http://localhost:8080/api/v1/quizzes/', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
+                        headers: { 'Authorization': `Bearer ${token}` }
                     });
 
                     if (!response.ok) throw new Error('Не удалось загрузить список квизов');
                     
                     const data = await response.json();
-                    
-                    // Адаптируем данные под наш интерфейс
                     const formattedQuizzes = data.map((q: any) => ({
                         id: q.ID || q.id,
                         title: q.title,
                         questionsCount: q.questions ? q.questions.length : 0 
                     }));
-                    
                     setQuizzes(formattedQuizzes);
                 } catch (err: any) {
-                    console.error(err);
                     setError(err.message);
                 } finally {
-                    setIsFetchingQuizzes(false);
+                    setIsFetchingData(false);
                 }
             };
-
             fetchQuizzes();
+        } else {
+            // Загрузка истории для участника
+            const fetchHistory = async () => {
+                try {
+                    const response = await fetch('http://localhost:8080/api/v1/quizzes/history', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    if (!response.ok) throw new Error('Не удалось загрузить историю');
+                    
+                    const data = await response.json();
+                    setHistory(data || []);
+                } catch (err: any) {
+                    setError(err.message);
+                } finally {
+                    setIsFetchingData(false);
+                }
+            };
+            fetchHistory();
         }
     }, [role]);
 
@@ -168,25 +193,26 @@ export const Dashboard = () => {
                         )}
                     </section>
 
-                    {/* Правая колонка: Список реальных квизов */}
+                    {/* Правая колонка: Список реальных квизов или история */}
                     <section className="flex flex-col rounded-xl bg-white p-6 shadow-sm">
                         <h2 className="mb-4 text-xl font-semibold">
                             {role === 'organizer' ? 'Мои квизы' : 'История участия'}
                         </h2>
                         
-                        {role === 'organizer' ? (
+                        {error && (
+                            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 border border-red-100">
+                                {error}
+                            </div>
+                        )}
+
+                        {isFetchingData ? (
+                            <div className="flex justify-center p-8 text-gray-400">
+                                Загрузка данных...
+                            </div>
+                        ) : role === 'organizer' ? (
+                            /* --- БЛОК ОРГАНИЗАТОРА (Список квизов) --- */
                             <div className="flex flex-col gap-4">
-                                {error && (
-                                    <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 border border-red-100">
-                                        {error}
-                                    </div>
-                                )}
-                                
-                                {isFetchingQuizzes ? (
-                                    <div className="flex justify-center p-8 text-gray-400">
-                                        Загрузка квизов...
-                                    </div>
-                                ) : quizzes.length > 0 ? (
+                                {quizzes.length > 0 ? (
                                     quizzes.map((quiz) => (
                                         <div key={quiz.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30">
                                             <div>
@@ -212,9 +238,39 @@ export const Dashboard = () => {
                                 )}
                             </div>
                         ) : (
-                            <div className="flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 min-h-[160px]">
-                                <svg className="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                                <p>Пока здесь пусто</p>
+                            /* --- БЛОК УЧАСТНИКА (История) --- */
+                            <div className="flex flex-col gap-4">
+                                {history.length > 0 ? (
+                                    history.map((item, idx) => (
+                                        <div key={idx} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30 shadow-sm">
+                                            <div>
+                                                <h3 className="font-semibold text-gray-800 text-lg">{item.quiz_title}</h3>
+                                                <p className="text-sm text-gray-500">{item.played_at}</p>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-6">
+                                                {/* Блок с местом */}
+                                                <div className="flex flex-col items-center justify-center">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Место</span>
+                                                    <span className={`text-2xl font-extrabold ${item.place === 1 ? 'text-yellow-500 drop-shadow-sm' : item.place === 2 ? 'text-gray-400 drop-shadow-sm' : item.place === 3 ? 'text-orange-500 drop-shadow-sm' : 'text-gray-600'}`}>
+                                                        {item.place === 1 ? '🥇 1' : item.place === 2 ? '🥈 2' : item.place === 3 ? '🥉 3' : `#${item.place}`}
+                                                    </span>
+                                                </div>
+
+                                                {/* Блок с баллами */}
+                                                <div className="flex min-w-[100px] flex-col items-center justify-center rounded-xl bg-green-100 px-4 py-2 text-green-700 border border-green-200 shadow-sm">
+                                                    <span className="text-xl font-black leading-none">{item.score}</span>
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-80 mt-1">баллов</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 min-h-[160px]">
+                                        <svg className="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                                        <p>Вы еще не играли ни в один квиз</p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </section>

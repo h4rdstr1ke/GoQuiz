@@ -33,6 +33,16 @@ const (
 
 // --- Структуры таблиц ---
 
+type GameResult struct {
+	ID        uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null"`
+	QuizID    uuid.UUID `gorm:"type:uuid;not null"`
+	Score     int       `gorm:"not null"`
+	Place     int       `gorm:"not null;default:0"`
+	CreatedAt time.Time
+	Quiz      Quiz `gorm:"foreignKey:QuizID"`
+}
+
 type User struct {
 	ID           uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
 	Username     string    `gorm:"unique;not null" json:"username"`
