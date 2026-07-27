@@ -14,18 +14,26 @@ interface Question {
     text: string;
     type: QuestionType;
     timeLimit: number;
+    points: number;
     options: Option[];
 }
 
 export const CreateQuiz = () => {
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(false);
+    
+    // Состояния квиза
     const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    
+    // Состояния вопросов
     const [questions, setQuestions] = useState<Question[]>([
         {
             id: '1',
             text: '',
             type: 'single_choice',
             timeLimit: 30,
+            points: 100,
             options: [{ id: '1-1', text: '', isCorrect: false }]
         }
     ]);
@@ -41,6 +49,7 @@ export const CreateQuiz = () => {
                 text: '',
                 type: 'single_choice',
                 timeLimit: 30,
+                points: 100,
                 options: [{ id: `${newId}-1`, text: '', isCorrect: false }]
             }
         ]);
@@ -93,14 +102,78 @@ export const CreateQuiz = () => {
         }));
     };
 
-    const handleSave = () => {
-        console.log('Отправка на бэкенд:', { title, questions });
-        alert('Квиз сохранен!');
-        navigate('/dashboard');
+    // --- Интеграция с бэкендом ---
+
+    const handleSave = async () => {
+        if (!title.trim()) {
+            alert('Пожалуйста, введите название квиза');
+            return;
+        }
+
+        setIsLoading(true);
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            };
+
+            const quizPayload = {
+                title,
+                description,
+                category: 'general' 
+            };
+
+            const quizRes = await fetch('http://localhost:8080/api/v1/quizzes/', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(quizPayload)
+            });
+
+            if (!quizRes.ok) throw new Error('Ошибка при создании квиза');
+            
+            const createdQuiz = await quizRes.json();
+            const quizId = createdQuiz.id; 
+
+            for (let i = 0; i < questions.length; i++) {
+                const q = questions[i];
+                
+                // под структуру (AddQuestionInput)
+                const questionPayload = {
+                    content_text: q.text,
+                    type: q.type,
+                    time_limit_seconds: q.timeLimit,
+                    points: q.points,
+                    sort_order: i + 1,
+                    options: q.type !== 'text' ? q.options.map(opt => ({
+                        option_text: opt.text,
+                        is_correct: opt.isCorrect
+                    })) : []
+                };
+
+                const qRes = await fetch(`http://localhost:8080/api/v1/quizzes/${quizId}/questions`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(questionPayload)
+                });
+
+                if (!qRes.ok) throw new Error(`Ошибка при сохранении вопроса ${i + 1}`);
+            }
+
+            alert('Квиз успешно сохранен!');
+            navigate('/dashboard');
+
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-8 pb-24">
+        <div className="min-h-screen bg-gray-50 p-8 pb-24 font-sans">
             <div className="mx-auto max-w-3xl">
 
                 <header className="mb-8 flex items-center justify-between">
@@ -112,38 +185,63 @@ export const CreateQuiz = () => {
                     </div>
                     <button
                         onClick={handleSave}
-                        className="rounded-lg bg-indigo-600 px-6 py-2 text-white font-medium hover:bg-indigo-700 transition-colors"
+                        disabled={isLoading}
+                        className={`rounded-lg px-6 py-2 text-white font-medium transition-colors ${isLoading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
                     >
-                        Сохранить квиз
+                        {isLoading ? 'Сохраняем...' : 'Сохранить квиз'}
                     </button>
                 </header>
 
-                <section className="mb-8 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Название квиза</label>
-                    <input
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Например: Основы Golang"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    />
+                <section className="mb-8 space-y-4 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Название квиза</label>
+                        <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="Например: Основы Golang"
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Описание (необязательно)</label>
+                        <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Краткое описание для студентов..."
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                            rows={2}
+                        />
+                    </div>
                 </section>
 
                 <div className="space-y-6">
                     {questions.map((q, index) => (
                         <div key={q.id} className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
 
-                            <div className="mb-4 flex items-center justify-between border-b pb-4">
+                            <div className="mb-4 flex flex-wrap items-center justify-between border-b pb-4 gap-4">
                                 <h3 className="text-lg font-semibold">Вопрос {index + 1}</h3>
-                                <select
-                                    value={q.type}
-                                    onChange={(e) => handleQuestionChange(q.id, 'type', e.target.value)}
-                                    className="rounded-md border border-gray-300 p-1 text-sm focus:border-indigo-500 focus:outline-none"
-                                >
-                                    <option value="single_choice">Один ответ</option>
-                                    <option value="multiple_choice">Несколько ответов</option>
-                                    <option value="text">Текстовый ввод</option>
-                                </select>
+                                
+                                <div className="flex gap-4 items-center">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm text-gray-600">Время (сек):</label>
+                                        <input
+                                            type="number"
+                                            value={q.timeLimit}
+                                            onChange={(e) => handleQuestionChange(q.id, 'timeLimit', parseInt(e.target.value))}
+                                            className="w-16 rounded-md border border-gray-300 p-1 text-sm focus:border-indigo-500 focus:outline-none"
+                                        />
+                                    </div>
+                                    <select
+                                        value={q.type}
+                                        onChange={(e) => handleQuestionChange(q.id, 'type', e.target.value)}
+                                        className="rounded-md border border-gray-300 p-1 text-sm focus:border-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="single_choice">Один ответ</option>
+                                        <option value="multiple_choice">Несколько ответов</option>
+                                        <option value="text">Текстовый ввод</option>
+                                    </select>
+                                </div>
                             </div>
 
                             <input
