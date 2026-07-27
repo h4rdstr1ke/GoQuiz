@@ -26,7 +26,7 @@ export const Dashboard = () => {
     const [role] = useState<Role>((localStorage.getItem('role') as Role) || 'participant'); 
     const [roomCode, setRoomCode] = useState('');
     
-    const [activeRoomCode, setActiveRoomCode] = useState<string | null>(localStorage.getItem('currentRoomCode'));
+    const [activeRoomCode] = useState<string | null>(localStorage.getItem('currentRoomCode'));
     
     // Состояния данных
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);

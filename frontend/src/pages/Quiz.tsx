@@ -103,7 +103,7 @@ export const Quiz = () => {
                 setTimeLeft(payload.time_limit || 0); 
                 
                 if (payload.has_answered) {
-                    setSelectedOption('reconnected'); // Блокируем кнопки, если игрок уже отвечал
+                    setSelectedOption('reconnected'); 
                 } else {
                     setSelectedOption(null); 
                 }
@@ -115,6 +115,7 @@ export const Quiz = () => {
             }
 
             case 'player_answered':
+                
                 const { username, leaderboard: newLeaderboard } = lastMessage.payload;
                 
                 setAnsweredPlayers(prev => {
@@ -140,8 +141,9 @@ export const Quiz = () => {
                 break;
 
             case 'game_completed':
+                // Очищаем активную комнату из памяти, так как игра завершилась
                 localStorage.removeItem('currentRoomCode');
-                
+
                 // Переход на финальную таблицу лидеров
                 if (lastMessage.payload) {
                     setLeaderboard(lastMessage.payload);
@@ -304,6 +306,19 @@ export const Quiz = () => {
                     <div className="flex flex-col items-center flex-1 w-full max-w-2xl mx-auto">
                         {timeLeft > 0 ? (
                             <div className="flex flex-col items-center justify-center w-full flex-1">
+                                
+                                {/* Отображение вариантов ответов для организатора */}
+                                <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 mb-8">
+                                    {currentQuestion.options.map((opt) => (
+                                        <div
+                                            key={opt.id}
+                                            className={`flex items-center justify-center rounded-xl p-4 text-lg font-bold text-white shadow-sm opacity-90 ${opt.color}`}
+                                        >
+                                            {opt.text}
+                                        </div>
+                                    ))}
+                                </div>
+
                                 <div className="text-xl text-gray-600 font-medium mb-6">
                                     Ответили: <span className="font-bold text-indigo-600">{answeredPlayers.length}</span> из <span className="font-bold">{totalParticipants}</span>
                                 </div>
@@ -351,7 +366,7 @@ export const Quiz = () => {
                                 : 'bg-gray-400 hover:bg-gray-500'
                             }`}
                         >
-                            {timeLeft === 0 ? 'Следующий вопрос →' : 'Пропустить таймер ⏩'}
+                            {timeLeft === 0 ? 'Следующий вопрос →' : 'Пропустить таймер'}
                         </button>
                     </div>
                 )}
