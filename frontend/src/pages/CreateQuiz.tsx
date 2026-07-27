@@ -42,7 +42,7 @@ export const CreateQuiz = () => {
         }
     ]);
 
-    // --- Обработчики добавления ---
+    // --- Обработчики добавления и удаления ---
 
     const handleAddQuestion = () => {
         const newId = Date.now().toString();
@@ -59,6 +59,15 @@ export const CreateQuiz = () => {
                 options: [{ id: `${newId}-1`, text: '', isCorrect: false }]
             }
         ]);
+    };
+
+    // Обработчик удаления вопроса
+    const handleRemoveQuestion = (questionId: string) => {
+        if (questions.length === 1) {
+            alert('В квизе должен быть хотя бы один вопрос!');
+            return;
+        }
+        setQuestions(questions.filter(q => q.id !== questionId));
     };
 
     const handleAddOption = (questionId: string) => {
@@ -228,10 +237,22 @@ export const CreateQuiz = () => {
 
                 <div className="space-y-6">
                     {questions.map((q, index) => (
-                        <div key={q.id} className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
+                        <div key={q.id} className="rounded-xl bg-white p-6 shadow-sm border border-gray-200 transition-all">
 
                             <div className="mb-4 flex flex-wrap items-center justify-between border-b pb-4 gap-4">
-                                <h3 className="text-lg font-semibold">Вопрос {index + 1}</h3>
+                                {/* Заголовок и кнопка удаления */}
+                                <div className="flex items-center gap-4">
+                                    <h3 className="text-lg font-semibold text-gray-800">Вопрос {index + 1}</h3>
+                                    {questions.length > 1 && (
+                                        <button
+                                            onClick={() => handleRemoveQuestion(q.id)}
+                                            className="rounded px-2 py-1 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
+                                            title="Удалить вопрос"
+                                        >
+                                            Удалить
+                                        </button>
+                                    )}
+                                </div>
                                 
                                 <div className="flex gap-4 items-center flex-wrap">
                                     <div className="flex items-center gap-2">
