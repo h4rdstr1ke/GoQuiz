@@ -252,14 +252,27 @@ export const Quiz = () => {
             {/* Основная зона с вопросом */}
             <main className="flex flex-1 flex-col p-8 max-w-4xl w-full mx-auto">
 
-                {/* Текст вопроса и Изображение */}
+                {/* Текст вопроса, Подсказка и Изображение */}
                 <div className="mb-8 flex flex-col items-center justify-center rounded-2xl bg-white p-8 shadow-sm text-center">
                     <h1 className="text-3xl md:text-4xl font-bold text-gray-800 leading-tight mb-4">
                         {currentQuestion.text}
                     </h1>
-                    {/* НОВОЕ: Отображение картинки, если она есть */}
+
+                    {/* Подсказки о типе вопроса --- */}
+                    {currentQuestion.type === 'multiple_choice' && (
+                        <div className="mb-4 inline-block rounded-full bg-purple-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-purple-700 border border-purple-200 shadow-sm">
+                            Выберите несколько вариантов
+                        </div>
+                    )}
+                    {currentQuestion.type === 'text' && (
+                        <div className="mb-4 inline-block rounded-full bg-gray-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-600 border border-gray-200 shadow-sm">
+                            Напишите ответ текстом
+                        </div>
+                    )}
+                    
+                    {/* Отображение картинки, если она есть */}
                     {currentQuestion.imageUrl && (
-                        <img src={currentQuestion.imageUrl} alt="Иллюстрация к вопросу" className="max-h-64 rounded-xl object-contain shadow-md" />
+                        <img src={currentQuestion.imageUrl} alt="Иллюстрация к вопросу" className="max-h-64 rounded-xl object-contain shadow-md mt-2" />
                     )}
                 </div>
 
