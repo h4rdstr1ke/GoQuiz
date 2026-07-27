@@ -62,18 +62,13 @@ func (r *Room) Run() {
 
 	for {
 		select {
+		// КОГДА КЛИЕНТ ПОДКЛЮЧАЕТСЯ
 		case client := <-r.Register:
 			r.Clients[client] = true
+			log.Printf("В комнату %s зашел: %s", r.RoomCode, client.Username)
 
-			// Уведомляем всех, что зашел новый игрок
-			joinMsg := Message{
-				Type: EventPlayerJoined,
-				Payload: PlayerJoinedPayload{
-					Username: client.Username,
-					Role:     client.Role,
-				},
-			}
-			r.broadcastJSON(joinMsg)
+			// Рассылаем всем актуальный список
+			r.sendPlayersList()
 
 		case client := <-r.Unregister:
 			if _, ok := r.Clients[client]; ok {
@@ -83,6 +78,8 @@ func (r *Room) Run() {
 					r.Manager.RemoveRoom(r.RoomCode)
 					return
 				}
+				// при выходе рассылаем снова
+				r.sendPlayersList()
 			}
 
 		// --- ОБРАБОТКА ИГРОВОЙ ЛОГИКИ ---
@@ -133,7 +130,16 @@ func (r *Room) Run() {
 // Вспомогательная функция для отправки JSON всем клиентам
 func (r *Room) broadcastJSON(msg Message) {
 	bytes, _ := json.Marshal(msg)
-	r.Broadcast <- bytes
+
+	// Рассылаем сообщения напрямую в буферы клиентов, не блокируя основной цикл
+	for client := range r.Clients {
+		select {
+		case client.Send <- bytes:
+		default:
+			close(client.Send)
+			delete(r.Clients, client)
+		}
+	}
 }
 
 // Вспомогательная функция для отправки текущего вопроса (без флага IsCorrect)
@@ -165,5 +171,26 @@ func (r *Room) sendCurrentQuestion() {
 			"options":       safeOptions,
 			"time_limit":    q.TimeLimitSeconds,
 		},
+	})
+}
+
+// Вспомогательная функция для рассылки полного списка участников
+func (r *Room) sendPlayersList() {
+	type PlayerInfo struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+	}
+
+	var players []PlayerInfo
+	for c := range r.Clients {
+		players = append(players, PlayerInfo{
+			Username: c.Username,
+			Role:     c.Role,
+		})
+	}
+
+	r.broadcastJSON(Message{
+		Type:    EventPlayersList,
+		Payload: players,
 	})
 }

@@ -8,8 +8,9 @@ const (
 	EventSubmitAnswer EventType = "submit_answer"
 	EventNextQuestion EventType = "next_question" // Только для организатора
 
-	// Исходящие (от сервthe к фронтенду)
-	EventPlayerJoined  EventType = "player_joined"
+	// Исходящие (от сервера к фронтенду)
+	EventPlayersList   EventType = "players_list"  // Рассылка полного списка участников
+	EventPlayerJoined  EventType = "player_joined" // Оставлено на всякий случай
 	EventGameStarted   EventType = "game_started"
 	EventQuestionShow  EventType = "question_show"
 	EventAnswerResult  EventType = "answer_result"

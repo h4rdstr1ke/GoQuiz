@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useWebSocket } from '../context/WebSocketContext';
 
 type Role = 'organizer' | 'participant';
 
@@ -11,23 +12,53 @@ interface Player {
 export const Lobby = () => {
     const { roomCode } = useParams<{ roomCode: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    
+    const { connect, sendMessage, lastMessage } = useWebSocket();
 
-    // Временно
-    // TODO webSocket
-    const [role] = useState<Role>('participant');
-    const [players] = useState<Player[]>([
-        { id: '1', name: 'Иван Иванов' },
-        { id: '2', name: 'Alex' },
-        { id: '3', name: 'Гость_773' },
-    ]);
+    // Берем данные из URL. Если их нет, по умолчанию делаем организатором
+    const roleParam = searchParams.get('role') as Role | null;
+    const role: Role = roleParam || 'organizer';
+    
+    const defaultName = role === 'organizer' ? 'Преподаватель' : `Студент-${Math.floor(Math.random() * 100)}`;
+    const username = searchParams.get('name') || defaultName;
+
+    const [players, setPlayers] = useState<Player[]>([]);
+
+    // Устанавливаем соединение при входе в лобби
+    useEffect(() => {
+        if (roomCode) {
+            connect(roomCode, username, role);
+        }
+    }, [roomCode, connect, username, role]);
+
+    // Слушаем входящие сообщения от сервера
+    useEffect(() => {
+        if (!lastMessage) return;
+
+        switch (lastMessage.type) {
+            case 'players_list':
+                // Сервер присылает готовый массив всех игроков, мы просто сохраняем его
+                const updatedPlayers = lastMessage.payload.map((p: any) => ({
+                    id: p.username, // В качестве уникального ключа пока используем имя
+                    name: p.username
+                }));
+                setPlayers(updatedPlayers);
+                break;
+
+            case 'game_started':
+            case 'question_show': // Защита: переходим при любом из этих событий, чтобы никого не оставило в лобби
+                navigate(`/quiz/${roomCode}`);
+                break;
+        }
+    }, [lastMessage, navigate, roomCode]);
 
     const handleStartGame = () => {
-        navigate(`/quiz/${roomCode}`);
+        sendMessage('game_started');
     };
 
     return (
         <div className="flex min-h-screen flex-col bg-indigo-50 p-6 font-sans">
-
             {/* Верхний бар */}
             <header className="flex w-full items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
                 <button
@@ -40,12 +71,11 @@ export const Lobby = () => {
                     <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Код комнаты</p>
                     <h1 className="text-4xl font-extrabold text-indigo-700 tracking-widest">{roomCode}</h1>
                 </div>
-                <div className="w-20"></div> {/* Пустой div для центрирования кода комнаты */}
+                <div className="w-20"></div>
             </header>
 
             {/* Основная зона с игроками */}
             <main className="mx-auto mt-8 flex w-full max-w-5xl flex-1 flex-col items-center">
-
                 <div className="mb-8 text-center">
                     <h2 className="text-2xl font-bold text-gray-800">
                         Ожидание игроков...
@@ -71,7 +101,6 @@ export const Lobby = () => {
                         </div>
                     ))}
                 </div>
-
             </main>
 
             {/* Подвал с кнопкой старта (только для организатора) */}
@@ -93,7 +122,6 @@ export const Lobby = () => {
                     </div>
                 )}
             </footer>
-
         </div>
     );
 };
