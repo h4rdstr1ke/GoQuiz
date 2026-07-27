@@ -6,8 +6,7 @@ type Role = 'organizer' | 'participant';
 interface Quiz {
     id: string;
     title: string;
-    // Бэкенд может не возвращать количество вопросов сразу (если мы не делали Preload), 
-    // поэтому пока сделаем это поле необязательным
+    // Бэкенд может не возвращать количество вопросов сразу
     questionsCount?: number; 
 }
 
@@ -18,13 +17,24 @@ interface HistoryItem {
     played_at: string;
 }
 
+// Новый интерфейс для истории организатора
+interface OrganizerHistoryItem {
+    quiz_title: string;
+    room_code: string;
+    played_at: string;
+}
+
 export const Dashboard = () => {
     const [role] = useState<Role>((localStorage.getItem('role') as Role) || 'participant'); 
     const [roomCode, setRoomCode] = useState('');
     
-    // Состояния для квизов (организатор) и истории (участник)
+    // Состояния данных
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);
     const [history, setHistory] = useState<HistoryItem[]>([]);
+    const [organizerHistory, setOrganizerHistory] = useState<OrganizerHistoryItem[]>([]);
+    
+    // Переключатель вкладок для организатора
+    const [activeTab, setActiveTab] = useState<'quizzes' | 'history'>('quizzes');
     
     // Состояния загрузки и ошибок API
     const [isLoading, setIsLoading] = useState(false);
@@ -41,28 +51,38 @@ export const Dashboard = () => {
         setIsFetchingData(true);
 
         if (role === 'organizer') {
-            const fetchQuizzes = async () => {
+            // Загружаем сразу и квизы, и историю сессий
+            const fetchOrganizerData = async () => {
                 try {
-                    const response = await fetch('http://localhost:8080/api/v1/quizzes/', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const [quizzesRes, historyRes] = await Promise.all([
+                        fetch('http://localhost:8080/api/v1/quizzes/', {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        }),
+                        fetch('http://localhost:8080/api/v1/quizzes/organizer-history', {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        })
+                    ]);
 
-                    if (!response.ok) throw new Error('Не удалось загрузить список квизов');
+                    if (!quizzesRes.ok) throw new Error('Не удалось загрузить список квизов');
                     
-                    const data = await response.json();
-                    const formattedQuizzes = data.map((q: any) => ({
+                    const quizzesData = await quizzesRes.json();
+                    setQuizzes(quizzesData.map((q: any) => ({
                         id: q.ID || q.id,
                         title: q.title,
                         questionsCount: q.questions ? q.questions.length : 0 
-                    }));
-                    setQuizzes(formattedQuizzes);
+                    })));
+
+                    if (historyRes.ok) {
+                        const historyData = await historyRes.json();
+                        setOrganizerHistory(historyData || []);
+                    }
                 } catch (err: any) {
                     setError(err.message);
                 } finally {
                     setIsFetchingData(false);
                 }
             };
-            fetchQuizzes();
+            fetchOrganizerData();
         } else {
             // Загрузка истории для участника
             const fetchHistory = async () => {
@@ -106,7 +126,7 @@ export const Dashboard = () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` // Не забываем токен и тут!
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({ quiz_id: quizId }),
             });
@@ -193,11 +213,8 @@ export const Dashboard = () => {
                         )}
                     </section>
 
-                    {/* Правая колонка: Список реальных квизов или история */}
+                    {/* Правая колонка: Список квизов или история */}
                     <section className="flex flex-col rounded-xl bg-white p-6 shadow-sm">
-                        <h2 className="mb-4 text-xl font-semibold">
-                            {role === 'organizer' ? 'Мои квизы' : 'История участия'}
-                        </h2>
                         
                         {error && (
                             <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 border border-red-100">
@@ -210,67 +227,110 @@ export const Dashboard = () => {
                                 Загрузка данных...
                             </div>
                         ) : role === 'organizer' ? (
-                            /* --- БЛОК ОРГАНИЗАТОРА (Список квизов) --- */
-                            <div className="flex flex-col gap-4">
-                                {quizzes.length > 0 ? (
-                                    quizzes.map((quiz) => (
-                                        <div key={quiz.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30">
-                                            <div>
-                                                <h3 className="font-semibold text-gray-800">{quiz.title}</h3>
-                                                {/* Если бэкенд отдает вопросы, покажем их количество */}
-                                                {quiz.questionsCount !== undefined && quiz.questionsCount > 0 && (
-                                                    <p className="text-sm text-gray-500">{quiz.questionsCount} вопросов</p>
-                                                )}
+                            /* --- БЛОК ОРГАНИЗАТОРА --- */
+                            <div className="flex flex-col">
+                                {/* Вкладки */}
+                                <div className="mb-6 flex gap-6 border-b border-gray-200">
+                                    <button 
+                                        onClick={() => setActiveTab('quizzes')}
+                                        className={`pb-3 text-lg font-semibold transition-colors border-b-2 ${activeTab === 'quizzes' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Мои квизы
+                                    </button>
+                                    <button 
+                                        onClick={() => setActiveTab('history')}
+                                        className={`pb-3 text-lg font-semibold transition-colors border-b-2 ${activeTab === 'history' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Проведенные игры
+                                    </button>
+                                </div>
+                                
+                                {/* Контент вкладок */}
+                                {activeTab === 'quizzes' ? (
+                                    <div className="flex flex-col gap-4">
+                                        {quizzes.length > 0 ? (
+                                            quizzes.map((quiz) => (
+                                                <div key={quiz.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30">
+                                                    <div>
+                                                        <h3 className="font-semibold text-gray-800">{quiz.title}</h3>
+                                                        {quiz.questionsCount !== undefined && quiz.questionsCount > 0 && (
+                                                            <p className="text-sm text-gray-500">{quiz.questionsCount} вопросов</p>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleCreateRoom(quiz.id)}
+                                                        disabled={isLoading}
+                                                        className="rounded-lg bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-200 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {isLoading ? 'Запуск...' : 'Начать игру'}
+                                                    </button>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="flex h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 text-sm">
+                                                <p>У вас еще нет созданных квизов.</p>
                                             </div>
-                                            <button
-                                                onClick={() => handleCreateRoom(quiz.id)}
-                                                disabled={isLoading}
-                                                className="rounded-lg bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-200 transition-colors disabled:opacity-50"
-                                            >
-                                                {isLoading ? 'Запуск...' : 'Начать игру'}
-                                            </button>
-                                        </div>
-                                    ))
+                                        )}
+                                    </div>
                                 ) : (
-                                    <div className="flex h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 text-sm">
-                                        <p>У вас еще нет созданных квизов.</p>
+                                    <div className="flex flex-col gap-4">
+                                        {organizerHistory.length > 0 ? (
+                                            organizerHistory.map((item, idx) => (
+                                                <div key={idx} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30 shadow-sm">
+                                                    <div>
+                                                        <h3 className="font-semibold text-gray-800 text-lg">{item.quiz_title}</h3>
+                                                        <p className="text-sm text-gray-500">{item.played_at}</p>
+                                                    </div>
+                                                    <div className="rounded-lg bg-indigo-100 px-4 py-2 font-mono font-bold text-indigo-700 border border-indigo-200 shadow-sm">
+                                                        Код: {item.room_code}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="flex h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 text-sm">
+                                                <p>Вы еще не провели ни одной игры.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
                         ) : (
                             /* --- БЛОК УЧАСТНИКА (История) --- */
-                            <div className="flex flex-col gap-4">
-                                {history.length > 0 ? (
-                                    history.map((item, idx) => (
-                                        <div key={idx} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30 shadow-sm">
-                                            <div>
-                                                <h3 className="font-semibold text-gray-800 text-lg">{item.quiz_title}</h3>
-                                                <p className="text-sm text-gray-500">{item.played_at}</p>
-                                            </div>
-                                            
-                                            <div className="flex items-center gap-6">
-                                                {/* Блок с местом */}
-                                                <div className="flex flex-col items-center justify-center">
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Место</span>
-                                                    <span className={`text-2xl font-extrabold ${item.place === 1 ? 'text-yellow-500 drop-shadow-sm' : item.place === 2 ? 'text-gray-400 drop-shadow-sm' : item.place === 3 ? 'text-orange-500 drop-shadow-sm' : 'text-gray-600'}`}>
-                                                        {item.place === 1 ? '🥇 1' : item.place === 2 ? '🥈 2' : item.place === 3 ? '🥉 3' : `#${item.place}`}
-                                                    </span>
+                            <div className="flex flex-col">
+                                <h2 className="mb-6 text-xl font-semibold border-b border-gray-200 pb-3 text-indigo-600">История участия</h2>
+                                <div className="flex flex-col gap-4">
+                                    {history.length > 0 ? (
+                                        history.map((item, idx) => (
+                                            <div key={idx} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30 shadow-sm">
+                                                <div>
+                                                    <h3 className="font-semibold text-gray-800 text-lg">{item.quiz_title}</h3>
+                                                    <p className="text-sm text-gray-500">{item.played_at}</p>
                                                 </div>
+                                                
+                                                <div className="flex items-center gap-6">
+                                                    {/* Место */}
+                                                    <div className="flex flex-col items-center justify-center">
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Место</span>
+                                                        <span className={`text-2xl font-extrabold ${item.place === 1 ? 'text-yellow-500 drop-shadow-sm' : item.place === 2 ? 'text-gray-400 drop-shadow-sm' : item.place === 3 ? 'text-orange-500 drop-shadow-sm' : 'text-gray-600'}`}>
+                                                            {item.place === 1 ? '🥇 1' : item.place === 2 ? '🥈 2' : item.place === 3 ? '🥉 3' : `#${item.place}`}
+                                                        </span>
+                                                    </div>
 
-                                                {/* Блок с баллами */}
-                                                <div className="flex min-w-[100px] flex-col items-center justify-center rounded-xl bg-green-100 px-4 py-2 text-green-700 border border-green-200 shadow-sm">
-                                                    <span className="text-xl font-black leading-none">{item.score}</span>
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-80 mt-1">баллов</span>
+                                                    {/* Баллы */}
+                                                    <div className="flex min-w-[100px] flex-col items-center justify-center rounded-xl bg-green-100 px-4 py-2 text-green-700 border border-green-200 shadow-sm">
+                                                        <span className="text-xl font-black leading-none">{item.score}</span>
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-80 mt-1">баллов</span>
+                                                    </div>
                                                 </div>
                                             </div>
+                                        ))
+                                    ) : (
+                                        <div className="flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 min-h-[160px]">
+                                            <svg className="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                                            <p>Вы еще не играли ни в один квиз</p>
                                         </div>
-                                    ))
-                                ) : (
-                                    <div className="flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 min-h-[160px]">
-                                        <svg className="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                                        <p>Вы еще не играли ни в один квиз</p>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         )}
                     </section>

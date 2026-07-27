@@ -95,6 +95,7 @@ type QuizSession struct {
 	Status      SessionStatus `gorm:"type:session_status;default:'waiting'" json:"status"`
 	StartedAt   *time.Time    `json:"startedAt,omitempty"`
 	EndedAt     *time.Time    `json:"endedAt,omitempty"`
+	Quiz        Quiz          `gorm:"foreignKey:QuizID"`
 }
 
 type SessionParticipant struct {

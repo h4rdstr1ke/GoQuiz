@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"log"
+	"time"
 
 	"quiz-backend/internal/database"
 	"quiz-backend/models"
@@ -157,6 +158,22 @@ func (r *Room) Run() {
 						}
 					}
 					// --------------------------
+
+					// --- СОХРАНЕНИЕ СЕССИИ ДЛЯ ОРГАНИЗАТОРА ---
+					var quiz models.Quiz
+					// Достаем creator_id, чтобы записать его как организатора
+					if err := database.DB.Select("creator_id").First(&quiz, "id = ?", quizUUID).Error; err == nil {
+						now := time.Now()
+						session := models.QuizSession{
+							QuizID:      quizUUID,
+							OrganizerID: quiz.CreatorID,
+							RoomCode:    r.RoomCode,
+							Status:      models.StatusCompleted,
+							EndedAt:     &now,
+						}
+						database.DB.Create(&session)
+						log.Printf("Сессия %s сохранена в историю организатора", r.RoomCode)
+					}
 
 					r.broadcastJSON(Message{Type: EventGameCompleted, Payload: r.Scores})
 				} else {

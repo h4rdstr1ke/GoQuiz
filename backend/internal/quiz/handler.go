@@ -211,3 +211,39 @@ func (h *Handler) GetMyHistory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, history)
 }
+
+// Структура ответа для истории организатора
+type OrganizerHistoryResponse struct {
+	QuizTitle string `json:"quiz_title"`
+	RoomCode  string `json:"room_code"`
+	PlayedAt  string `json:"played_at"`
+}
+
+// GetOrganizerHistory — возвращает историю проведенных игр
+func (h *Handler) GetOrganizerHistory(c *gin.Context) {
+	userIDStr := c.MustGet("userID").(string)
+
+	var sessions []models.QuizSession
+	// Достаем завершенные сессии текущего организатора вместе с инфой о квизе
+	if err := database.DB.Preload("Quiz").Where("organizer_id = ? AND status = ?", userIDStr, models.StatusCompleted).Order("ended_at desc").Find(&sessions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при получении истории сессий"})
+		return
+	}
+
+	var history []OrganizerHistoryResponse
+	for _, s := range sessions {
+		// Защита от пустых дат (если EndedAt почему-то nil)
+		playedAt := ""
+		if s.EndedAt != nil {
+			playedAt = s.EndedAt.Format("02.01.2006 15:04")
+		}
+
+		history = append(history, OrganizerHistoryResponse{
+			QuizTitle: s.Quiz.Title,
+			RoomCode:  s.RoomCode,
+			PlayedAt:  playedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, history)
+}
