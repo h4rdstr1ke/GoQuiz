@@ -26,7 +26,7 @@ type Room struct {
 	// Игровое состояние
 	Questions            []models.Question
 	CurrentQuestionIndex int
-	Scores               map[string]int // UserID -> Total Score
+	Scores               map[string]int
 
 	// Каналы для управления состоянием комнаты
 	Register   chan *Client
@@ -140,10 +140,11 @@ func (r *Room) Run() {
 					}
 				}
 
-				// Если ответ верный, начисляем баллы
-				// todo можно сделать расчет на основе времени ответа (чем быстрее, тем больше)
+				// Если ответ верный, начисляем баллы по Username
 				if isCorrect {
-					r.Scores[cMsg.Client.UserID] += 100
+					r.Scores[cMsg.Client.Username] += 100
+				} else if _, exists := r.Scores[cMsg.Client.Username]; !exists {
+					r.Scores[cMsg.Client.Username] = 0 // Добавляем студента с 0 баллов, если он ошибся
 				}
 
 				// Формируем персональное сообщение с результатом
@@ -151,7 +152,7 @@ func (r *Room) Run() {
 					Type: EventAnswerResult,
 					Payload: AnswerResultPayload{
 						IsCorrect: isCorrect,
-						Score:     r.Scores[cMsg.Client.UserID],
+						Score:     r.Scores[cMsg.Client.Username],
 					},
 				}
 
@@ -171,7 +172,7 @@ func (r *Room) Run() {
 						}
 					}
 				}
-				log.Printf("Игрок %s ответил %t, текущий счет: %d", cMsg.Client.Username, isCorrect, r.Scores[cMsg.Client.UserID])
+				log.Printf("Игрок %s ответил %t, текущий счет: %d", cMsg.Client.Username, isCorrect, r.Scores[cMsg.Client.Username])
 			}
 
 		case message := <-r.Broadcast:

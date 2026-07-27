@@ -46,6 +46,7 @@ export const Quiz = () => {
 
     const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null);
     const [leaderboard, setLeaderboard] = useState<Record<string, number>>({});
+    const [isGameCompleted, setIsGameCompleted] = useState(false);
 
     // --- Обработка сообщений от сервера ---
     useEffect(() => {
@@ -83,9 +84,11 @@ export const Quiz = () => {
                 break;
 
             case 'game_completed':
-                // TODO переход на финальную таблицу лидеров
-                alert('Квиз завершен!');
-                navigate('/dashboard');
+                // Переход на финальную таблицу лидеров
+                if (lastMessage.payload) {
+                    setLeaderboard(lastMessage.payload);
+                }
+                setIsGameCompleted(true);
                 break;
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,6 +127,43 @@ export const Quiz = () => {
 
     // Сортируем таблицу лидеров по убыванию баллов
     const sortedLeaderboard = Object.entries(leaderboard).sort((a, b) => b[1] - a[1]);
+
+    // --- ФИНАЛЬНЫЙ ЭКРАН ---
+    if (isGameCompleted) {
+        return (
+            <div className="flex min-h-screen flex-col items-center justify-center bg-indigo-900 font-sans p-6">
+                <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-10 text-center animate-fade-in-up">
+                    <h1 className="text-5xl font-extrabold text-gray-900 mb-4">🏁 Квиз завершен!</h1>
+                    <p className="text-xl text-gray-500 mb-10">Итоговая таблица результатов</p>
+                    
+                    <div className="space-y-4 mb-10">
+                        {sortedLeaderboard.length > 0 ? (
+                            sortedLeaderboard.map(([name, score], index) => (
+                                <div key={name} className={`flex items-center justify-between p-5 rounded-2xl border-2 ${index === 0 ? 'bg-yellow-50 border-yellow-200' : index === 1 ? 'bg-gray-50 border-gray-200' : index === 2 ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-100'}`}>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-4xl">
+                                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '👏'}
+                                        </div>
+                                        <span className="font-bold text-gray-800 text-2xl">{name}</span>
+                                    </div>
+                                    <span className="font-extrabold text-indigo-600 text-3xl">{score}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-gray-400 text-lg">Нет данных о баллах.</p>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="rounded-full bg-indigo-600 px-10 py-4 text-xl font-bold text-white shadow-lg hover:bg-indigo-700 transition-all transform hover:-translate-y-1"
+                    >
+                        Вернуться в меню
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex min-h-screen flex-col bg-gray-50 font-sans">
