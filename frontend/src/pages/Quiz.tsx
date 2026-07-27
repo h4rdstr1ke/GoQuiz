@@ -81,13 +81,19 @@ export const Quiz = () => {
                 break;
 
             case 'player_answered':
-               
+                
+                const { username, leaderboard: newLeaderboard } = lastMessage.payload;
+                
                 setAnsweredPlayers(prev => {
-                    if (!prev.includes(lastMessage.payload)) {
-                        return [...prev, lastMessage.payload];
+                    if (!prev.includes(username)) {
+                        return [...prev, username];
                     }
                     return prev;
                 });
+
+                if (newLeaderboard) {
+                    setLeaderboard(newLeaderboard);
+                }
                 break;
 
             case 'answer_result':
@@ -96,7 +102,7 @@ export const Quiz = () => {
                 break;
 
             case 'leaderboard_update':
-                // Обновляем таблицу баллов 
+                // Обновляем таблицу баллов (оставили для других случаев, например при старте/реконнекте)
                 setLeaderboard(lastMessage.payload);
                 break;
 

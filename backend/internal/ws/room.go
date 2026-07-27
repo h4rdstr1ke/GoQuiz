@@ -161,31 +161,23 @@ func (r *Room) Run() {
 					cMsg.Client.Send <- bytes
 				}
 
-				// Отправляем организаторам информацию о том что этот игрок ответил
-				answeredMsg := Message{
-					Type:    EventPlayerAnswered,
-					Payload: cMsg.Client.Username,
+				// (имя ответившего + обновленные баллы), чтобы React его не проглотил
+				organizerUpdateMsg := Message{
+					Type: EventPlayerAnswered,
+					Payload: map[string]interface{}{
+						"username":    cMsg.Client.Username,
+						"leaderboard": r.Scores,
+					},
 				}
-				if ansBytes, err := json.Marshal(answeredMsg); err == nil {
+				if orgBytes, err := json.Marshal(organizerUpdateMsg); err == nil {
 					for client := range r.Clients {
-						if client.Role == "organizer" {
-							client.Send <- ansBytes
+						// Отправляем всем, кто не participant (надежная проверка на организатора)
+						if client.Role != "participant" {
+							client.Send <- orgBytes
 						}
 					}
 				}
 
-				// Отправляем обновленную таблицу лидеров всем организаторам
-				leaderboardMsg := Message{
-					Type:    EventLeaderboardUpdate,
-					Payload: r.Scores,
-				}
-				if lbBytes, err := json.Marshal(leaderboardMsg); err == nil {
-					for client := range r.Clients {
-						if client.Role == "organizer" {
-							client.Send <- lbBytes
-						}
-					}
-				}
 				log.Printf("Игрок %s ответил %t, текущий счет: %d", cMsg.Client.Username, isCorrect, r.Scores[cMsg.Client.Username])
 			}
 
@@ -242,7 +234,7 @@ func (r *Room) sendCurrentQuestion() {
 	// Считаем общее число участников (не организаторов) в комнате
 	participantsCount := 0
 	for c := range r.Clients {
-		if c.Role == "participant" {
+		if c.Role != "organizer" && c.Role != "Organizer" {
 			participantsCount++
 		}
 	}
