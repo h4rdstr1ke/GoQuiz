@@ -37,10 +37,12 @@ type GameResult struct {
 	ID        uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	UserID    uuid.UUID `gorm:"type:uuid;not null"`
 	QuizID    uuid.UUID `gorm:"type:uuid;not null"`
+	RoomCode  string    `gorm:"not null;default:''"`
 	Score     int       `gorm:"not null"`
 	Place     int       `gorm:"not null;default:0"`
 	CreatedAt time.Time
 	Quiz      Quiz `gorm:"foreignKey:QuizID"`
+	User      User `gorm:"foreignKey:UserID"`
 }
 
 type User struct {

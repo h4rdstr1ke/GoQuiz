@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Lobby } from './pages/Lobby';
 import { Quiz } from './pages/Quiz';
 import { CreateQuiz } from './pages/CreateQuiz';
+import { SessionReport } from './pages/SessionReport';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/lobby/:roomCode" element={<Lobby />} />
         <Route path="/quiz/:roomCode" element={<Quiz />} />
+        <Route path="/report/:roomCode" element={<SessionReport/>} />
       </Routes>
     </BrowserRouter>
   );

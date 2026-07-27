@@ -146,10 +146,11 @@ func (r *Room) Run() {
 							}
 
 							if err := database.DB.Create(&models.GameResult{
-								UserID: userUUID,
-								QuizID: quizUUID,
-								Score:  score,
-								Place:  place, // <-- Сохраняем место в БД!
+								UserID:   userUUID,
+								QuizID:   quizUUID,
+								Score:    score,
+								RoomCode: r.RoomCode,
+								Place:    place,
 							}).Error; err != nil {
 								log.Printf("Ошибка записи в БД для %s: %v", client.Username, err)
 							} else {

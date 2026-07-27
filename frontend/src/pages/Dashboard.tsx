@@ -281,9 +281,12 @@ export const Dashboard = () => {
                                                         <h3 className="font-semibold text-gray-800 text-lg">{item.quiz_title}</h3>
                                                         <p className="text-sm text-gray-500">{item.played_at}</p>
                                                     </div>
-                                                    <div className="rounded-lg bg-indigo-100 px-4 py-2 font-mono font-bold text-indigo-700 border border-indigo-200 shadow-sm">
-                                                        Код: {item.room_code}
-                                                    </div>
+                                                    <button 
+                                                        onClick={() => navigate(`/report/${item.room_code}`)}
+                                                        className="rounded-lg bg-indigo-100 px-6 py-2 font-medium text-indigo-700 border border-indigo-200 shadow-sm hover:bg-indigo-600 hover:text-white transition-all transform hover:-translate-y-0.5"
+                                                    >
+                                                        Посмотреть отчет →
+                                                    </button>
                                                 </div>
                                             ))
                                         ) : (

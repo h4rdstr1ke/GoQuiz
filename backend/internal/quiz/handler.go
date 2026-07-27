@@ -247,3 +247,55 @@ func (h *Handler) GetOrganizerHistory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, history)
 }
+
+type PlayerReport struct {
+	Username string `json:"username"`
+	Score    int    `json:"score"`
+	Place    int    `json:"place"`
+}
+
+type SessionReportResponse struct {
+	QuizTitle string         `json:"quiz_title"`
+	PlayedAt  string         `json:"played_at"`
+	Players   []PlayerReport `json:"players"`
+}
+
+// GetSessionReport — возвращает подробный рейтинг конкретной игры
+func (h *Handler) GetSessionReport(c *gin.Context) {
+	roomCode := c.Param("roomCode")
+	userIDStr := c.MustGet("userID").(string)
+
+	var session models.QuizSession
+	// Проверяем, существует ли комната и принадлежит ли она этому организатору
+	if err := database.DB.Preload("Quiz").Where("room_code = ? AND organizer_id = ?", roomCode, userIDStr).First(&session).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Сессия не найдена или у вас нет доступа"})
+		return
+	}
+
+	var results []models.GameResult
+	// Достаем всех участников этой сессии (RoomCode) и сортируем по занятому месту
+	if err := database.DB.Preload("User").Where("room_code = ?", roomCode).Order("place asc").Find(&results).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при загрузке результатов"})
+		return
+	}
+
+	var players []PlayerReport
+	for _, r := range results {
+		players = append(players, PlayerReport{
+			Username: r.User.Username,
+			Score:    r.Score,
+			Place:    r.Place,
+		})
+	}
+
+	playedAt := ""
+	if session.EndedAt != nil {
+		playedAt = session.EndedAt.Format("02.01.2006 15:04")
+	}
+
+	c.JSON(http.StatusOK, SessionReportResponse{
+		QuizTitle: session.Quiz.Title,
+		PlayedAt:  playedAt,
+		Players:   players,
+	})
+}
