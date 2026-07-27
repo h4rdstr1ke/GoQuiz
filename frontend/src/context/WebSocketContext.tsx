@@ -10,6 +10,7 @@ export type EventType =
   | 'game_completed' 
   | 'submit_answer'
   | 'next_question'
+  | 'leaderboard_update'
   | 'error';
 
 export interface WsMessage {

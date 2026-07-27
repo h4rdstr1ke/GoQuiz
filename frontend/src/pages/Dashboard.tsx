@@ -4,20 +4,69 @@ import { useNavigate } from 'react-router-dom';
 // Временный тип
 type Role = 'organizer' | 'participant';
 
+interface Quiz {
+    id: string;
+    title: string;
+    questionsCount: number;
+}
+
+// Заглушка списка квизов
+// 
+const MOCK_QUIZZES: Quiz[] = [
+    { id: '274a4b78-abaf-4387-b394-8642642d4b82', title: 'Основы Golang', questionsCount: 10 },
+    { id: 'fdfd', title: 'React Hooks и Контекст', questionsCount: 5 },
+];
+
 export const Dashboard = () => {
-    const [role] = useState<Role>('organizer'); // participant - втор роль
+    const [role] = useState<Role>('organizer'); 
     const [roomCode, setRoomCode] = useState('');
+    
+    // Состояния для загрузки и ошибок API
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    
     const navigate = useNavigate();
 
     const handleJoinRoom = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (roomCode.trim().length > 0) {
-            navigate(`/lobby/${roomCode}`);
+            navigate(`/lobby/${roomCode}?role=participant`);
         }
     };
 
     const handleCreateQuiz = () => {
         navigate('/create-quiz');
+    };
+
+    const handleCreateRoom = async (quizId: string) => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const response = await fetch('http://localhost:8080/api/v1/ws/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ quiz_id: quizId }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Ошибка при создании комнаты');
+            }
+
+            const data = await response.json();
+            
+            // Перенаправляем преподавателя в лобби с правами организатора.
+            if (data.room_code) {
+                navigate(`/lobby/${data.room_code}?role=organizer`);
+            }
+        } catch (err) {
+            console.error(err);
+            setError('Не удалось запустить игру. Проверьте подключение к серверу.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -80,15 +129,41 @@ export const Dashboard = () => {
                         )}
                     </section>
 
-                    {/* Правая колонка: История (Заглушка) */}
-                    <section className="rounded-xl bg-white p-6 shadow-sm">
+                    {/* Правая колонка: История или список квизов */}
+                    <section className="flex flex-col rounded-xl bg-white p-6 shadow-sm">
                         <h2 className="mb-4 text-xl font-semibold">
                             {role === 'organizer' ? 'Мои квизы' : 'История участия'}
                         </h2>
-                        <div className="flex h-40 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500">
-                            <svg className="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                            <p>Пока здесь пусто</p>
-                        </div>
+                        
+                        {role === 'organizer' ? (
+                            <div className="flex flex-col gap-4">
+                                {error && (
+                                    <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 border border-red-100">
+                                        {error}
+                                    </div>
+                                )}
+                                {MOCK_QUIZZES.map((quiz) => (
+                                    <div key={quiz.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-indigo-100 hover:bg-indigo-50/30">
+                                        <div>
+                                            <h3 className="font-semibold text-gray-800">{quiz.title}</h3>
+                                            <p className="text-sm text-gray-500">{quiz.questionsCount} вопросов</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleCreateRoom(quiz.id)}
+                                            disabled={isLoading}
+                                            className="rounded-lg bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-200 transition-colors disabled:opacity-50"
+                                        >
+                                            {isLoading ? 'Запуск...' : 'Начать игру'}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 min-h-[160px]">
+                                <svg className="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                                <p>Пока здесь пусто</p>
+                            </div>
+                        )}
                     </section>
 
                 </div>

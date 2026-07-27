@@ -109,9 +109,69 @@ func (r *Room) Run() {
 				}
 
 			case EventSubmitAnswer:
-				// проверка на правильность (сверяя с r.Questions[r.CurrentQuestionIndex])
-				// и начисление баллов в r.Scores[cMsg.Client.UserID]
-				log.Printf("Игрок %s ответил на вопрос", cMsg.Client.Username)
+				// Защита: вдруг ответ прилетел, когда вопрос еще не задан или игра окончена
+				if r.CurrentQuestionIndex < 0 || r.CurrentQuestionIndex >= len(r.Questions) {
+					continue
+				}
+
+				// Т.к. Payload у нас interface{}, нужно перегнать его в нашу структуру SubmitAnswerPayload
+				// через повторный Marshal/Unmarshal
+				payloadBytes, err := json.Marshal(cMsg.Message.Payload)
+				if err != nil {
+					log.Printf("Ошибка обработки ответа от %s: %v", cMsg.Client.Username, err)
+					continue
+				}
+
+				var answer SubmitAnswerPayload
+				if err := json.Unmarshal(payloadBytes, &answer); err != nil {
+					log.Printf("Ошибка парсинга ответа от %s: %v", cMsg.Client.Username, err)
+					continue
+				}
+
+				// Достаем текущий вопрос
+				q := r.Questions[r.CurrentQuestionIndex]
+				isCorrect := false
+
+				// Ищем выбранный вариант ответа среди опций вопроса
+				for _, opt := range q.Options {
+					if opt.ID.String() == answer.AnswerID {
+						isCorrect = opt.IsCorrect
+						break
+					}
+				}
+
+				// Если ответ верный, начисляем баллы
+				// todo можно сделать расчет на основе времени ответа (чем быстрее, тем больше)
+				if isCorrect {
+					r.Scores[cMsg.Client.UserID] += 100
+				}
+
+				// Формируем персональное сообщение с результатом
+				resultMsg := Message{
+					Type: EventAnswerResult,
+					Payload: AnswerResultPayload{
+						IsCorrect: isCorrect,
+						Score:     r.Scores[cMsg.Client.UserID],
+					},
+				}
+
+				// Отправляем результат ТОЛЬКО тому, кто ответил (в его личный канал)
+				if bytes, err := json.Marshal(resultMsg); err == nil {
+					cMsg.Client.Send <- bytes
+				}
+				// Отправляем обновленную таблицу лидеров всем организаторам
+				leaderboardMsg := Message{
+					Type:    EventLeaderboardUpdate,
+					Payload: r.Scores,
+				}
+				if lbBytes, err := json.Marshal(leaderboardMsg); err == nil {
+					for client := range r.Clients {
+						if client.Role == "organizer" {
+							client.Send <- lbBytes
+						}
+					}
+				}
+				log.Printf("Игрок %s ответил %t, текущий счет: %d", cMsg.Client.Username, isCorrect, r.Scores[cMsg.Client.UserID])
 			}
 
 		case message := <-r.Broadcast:

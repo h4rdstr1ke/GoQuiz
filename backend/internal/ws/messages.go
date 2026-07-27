@@ -16,6 +16,8 @@ const (
 	EventAnswerResult  EventType = "answer_result"
 	EventGameCompleted EventType = "game_completed"
 	EventError         EventType = "error"
+
+	EventLeaderboardUpdate EventType = "leaderboard_update"
 )
 
 // Универсальная обертка для всех WebSocket сообщений
@@ -28,4 +30,15 @@ type Message struct {
 type PlayerJoinedPayload struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
+}
+
+// SubmitAnswerPayload — то, что присылает игрок при ответе
+type SubmitAnswerPayload struct {
+	AnswerID string `json:"answer_id"`
+}
+
+// AnswerResultPayload — то, что сервер отвечает игроку
+type AnswerResultPayload struct {
+	IsCorrect bool `json:"is_correct"`
+	Score     int  `json:"score"`
 }

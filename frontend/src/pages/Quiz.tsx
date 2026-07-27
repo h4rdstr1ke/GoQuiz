@@ -1,29 +1,95 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useWebSocket } from '../context/WebSocketContext';
 
 type Role = 'organizer' | 'participant';
+
+interface Option {
+    id: string;
+    text: string;
+    color: string;
+}
+
+interface Question {
+    number: number;
+    text: string;
+    options: Option[];
+}
+
+interface AnswerResult {
+    is_correct: boolean;
+    score: number;
+}
+
+const COLORS = [
+    'bg-red-500 hover:bg-red-600',
+    'bg-blue-500 hover:bg-blue-600',
+    'bg-yellow-500 hover:bg-yellow-600',
+    'bg-green-500 hover:bg-green-600',
+];
 
 export const Quiz = () => {
     const { roomCode } = useParams<{ roomCode: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    
+    // Подключаем сокеты
+    const { sendMessage, lastMessage } = useWebSocket();
 
-    // --- Моковое состояние ---
+    const roleParam = searchParams.get('role') as Role | null;
+    const role: Role = roleParam || 'participant';
 
-    const [role] = useState<Role>('participant');
-    const [timeLeft, setTimeLeft] = useState(20);
+    const [timeLeft, setTimeLeft] = useState(0);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
+    const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+    const [questionNumber, setQuestionNumber] = useState(0);
 
-    // Заглушка текущего вопроса
-    const currentQuestion = {
-        number: 1,
-        text: "Какой тип данных используется для хранения целых чисел в Golang по умолчанию?",
-        options: [
-            { id: '1', text: 'int', color: 'bg-red-500 hover:bg-red-600' },
-            { id: '2', text: 'float64', color: 'bg-blue-500 hover:bg-blue-600' },
-            { id: '3', text: 'string', color: 'bg-yellow-500 hover:bg-yellow-600' },
-            { id: '4', text: 'boolean', color: 'bg-green-500 hover:bg-green-600' },
-        ]
-    };
+    const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null);
+    const [leaderboard, setLeaderboard] = useState<Record<string, number>>({});
+
+    // --- Обработка сообщений от сервера ---
+    useEffect(() => {
+        if (!lastMessage) return;
+
+        switch (lastMessage.type) {
+            case 'question_show':
+                const payload = lastMessage.payload;
+                
+                const optionsWithColors: Option[] = payload.options.map((opt: any, index: number) => ({
+                    id: opt.id,
+                    text: opt.text,
+                    color: COLORS[index % COLORS.length]
+                }));
+
+                setQuestionNumber(prev => prev + 1);
+                setCurrentQuestion({
+                    number: questionNumber + 1, 
+                    text: payload.question_text,
+                    options: optionsWithColors
+                });
+                setTimeLeft(payload.time_limit || 20); 
+                setSelectedOption(null); // Сбрасываем выбранный ответ
+                setAnswerResult(null);   // Сбрасываем результат прошлого вопроса
+                break;
+
+            case 'answer_result':
+                // Сохраняем личный результат, полученный от сервера
+                setAnswerResult(lastMessage.payload);
+                break;
+
+            case 'leaderboard_update':
+                // Обновляем таблицу баллов 
+                setLeaderboard(lastMessage.payload);
+                break;
+
+            case 'game_completed':
+                // TODO переход на финальную таблицу лидеров
+                alert('Квиз завершен!');
+                navigate('/dashboard');
+                break;
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [lastMessage, navigate]);
 
     // --- Эмуляция таймера ---
     useEffect(() => {
@@ -38,14 +104,26 @@ export const Quiz = () => {
         // Разрешаем ответить только один раз и если время не вышло
         if (!selectedOption && timeLeft > 0) {
             setSelectedOption(optionId);
-            console.log(`Отправка по WebSocket: Ответ ${optionId}`);
+            // Отправляем ID ответа на сервер
+            sendMessage('submit_answer', { answer_id: optionId });
         }
     };
 
     const handleNextQuestion = () => {
-        alert('Переход к следующему вопросу (или таблице результатов)');
-        navigate('/dashboard'); // Пока просто возвращаем в кабинет
+        sendMessage('next_question');
     };
+
+    // Заглушка, пока сервер не прислал первый вопрос
+    if (!currentQuestion) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-gray-50 text-2xl font-bold text-gray-400">
+                Загрузка вопроса...
+            </div>
+        );
+    }
+
+    // Сортируем таблицу лидеров по убыванию баллов
+    const sortedLeaderboard = Object.entries(leaderboard).sort((a, b) => b[1] - a[1]);
 
     return (
         <div className="flex min-h-screen flex-col bg-gray-50 font-sans">
@@ -57,7 +135,7 @@ export const Quiz = () => {
                 </div>
 
                 {/* Таймер */}
-                <div className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold text-white shadow-md transition-colors ${timeLeft <= 5 ? 'bg-red-500 animate-pulse' : 'bg-indigo-600'}`}>
+                <div className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold text-white shadow-md transition-colors ${timeLeft === 0 ? 'bg-gray-400' : timeLeft <= 5 ? 'bg-red-500 animate-pulse' : 'bg-indigo-600'}`}>
                     {timeLeft}
                 </div>
 
@@ -67,59 +145,103 @@ export const Quiz = () => {
             </header>
 
             {/* Основная зона с вопросом */}
-            <main className="flex flex-1 flex-col p-8">
+            <main className="flex flex-1 flex-col p-8 max-w-6xl w-full mx-auto">
 
                 {/* Текст вопроса */}
-                <div className="mb-12 flex flex-1 items-center justify-center rounded-2xl bg-white p-8 shadow-sm text-center">
-                    <h1 className="text-3xl md:text-5xl font-bold text-gray-800 leading-tight">
+                <div className="mb-12 flex items-center justify-center rounded-2xl bg-white p-8 shadow-sm text-center min-h-[150px]">
+                    <h1 className="text-3xl md:text-4xl font-bold text-gray-800 leading-tight">
                         {currentQuestion.text}
                     </h1>
                 </div>
 
                 {/* Зона ответов / управления */}
                 {role === 'participant' ? (
-                    /* Интерфейс участника: Кнопки ответов */
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 flex-1 max-h-[40vh]">
-                        {currentQuestion.options.map((opt) => {
-                            // Логика подсветки выбранного ответа
-                            const isSelected = selectedOption === opt.id;
-                            const isFaded = selectedOption !== null && !isSelected;
+                    /* Интерфейс участника */
+                    timeLeft > 0 ? (
+                        /* Кнопки ответов во время таймера */
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 flex-1 max-h-[40vh]">
+                            {currentQuestion.options.map((opt) => {
+                                // Логика подсветки выбранного ответа
+                                const isSelected = selectedOption === opt.id;
+                                const isFaded = selectedOption !== null && !isSelected;
 
-                            return (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => handleAnswer(opt.id)}
-                                    disabled={selectedOption !== null || timeLeft === 0}
-                                    className={`flex items-center justify-center rounded-2xl p-6 text-2xl font-bold text-white shadow-sm transition-all duration-200 
-                    ${opt.color} 
-                    ${isFaded ? 'opacity-40 grayscale transform scale-95' : ''}
-                    ${isSelected ? 'ring-8 ring-white ring-opacity-50 transform scale-105 shadow-xl' : ''}
-                    ${selectedOption === null && timeLeft > 0 ? 'active:scale-95' : 'cursor-default'}
-                  `}
-                                >
-                                    {opt.text}
-                                </button>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    /* Интерфейс организатора: Статистика и управление */
-                    <div className="flex flex-col items-center justify-center space-y-6 flex-1">
-                        <div className="text-xl text-gray-600">
-                            Ожидаем ответы участников...
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => handleAnswer(opt.id)}
+                                        disabled={selectedOption !== null}
+                                        className={`flex items-center justify-center rounded-2xl p-6 text-2xl font-bold text-white shadow-sm transition-all duration-200 
+                                            ${opt.color} 
+                                            ${isFaded ? 'opacity-40 grayscale transform scale-95' : ''}
+                                            ${isSelected ? 'ring-8 ring-white ring-opacity-50 transform scale-105 shadow-xl' : ''}
+                                            ${selectedOption === null ? 'active:scale-95' : 'cursor-default'}
+                                        `}
+                                    >
+                                        {opt.text}
+                                    </button>
+                                );
+                            })}
                         </div>
+                    ) : (
+                        /* Экран результатов после истечения времени */
+                        <div className={`flex flex-1 flex-col items-center justify-center rounded-3xl p-8 text-white text-center shadow-lg transform transition-all animate-fade-in-up 
+                            ${answerResult?.is_correct ? 'bg-green-500' : answerResult === null ? 'bg-gray-500' : 'bg-red-500'}`}>
+                            
+                            <div className="text-6xl mb-4">
+                                {answerResult?.is_correct ? '🎉' : answerResult === null ? '⏳' : '❌'}
+                            </div>
+                            <h2 className="text-4xl font-bold mb-2">
+                                {answerResult?.is_correct ? 'Правильно!' : answerResult === null ? 'Время вышло!' : 'Неверно!'}
+                            </h2>
+                            {answerResult && (
+                                <p className="mt-4 text-xl">
+                                    Твой счет: <span className="font-bold text-3xl ml-2">{answerResult.score}</span>
+                                </p>
+                            )}
+                            <p className="mt-8 text-lg opacity-80">Ожидаем следующий вопрос...</p>
+                        </div>
+                    )
+                ) : (
+                    /* Интерфейс организатора */
+                    <div className="flex flex-col items-center flex-1 w-full max-w-2xl mx-auto">
+                        {timeLeft > 0 ? (
+                            <div className="flex flex-1 flex-col items-center justify-center text-2xl text-gray-400 font-medium animate-pulse">
+                                Ожидаем ответы участников...
+                            </div>
+                        ) : (
+                            <div className="w-full bg-white rounded-2xl shadow-sm p-6 mb-8 animate-fade-in-up">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Текущие результаты</h2>
+                                {sortedLeaderboard.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {sortedLeaderboard.map(([name, score], index) => (
+                                            <div key={name} className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-white ${index === 0 ? 'bg-yellow-400' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                                        {index + 1}
+                                                    </div>
+                                                    <span className="font-bold text-gray-700 text-lg">{name}</span>
+                                                </div>
+                                                <span className="font-extrabold text-indigo-600 text-xl">{score}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-gray-500">Пока никто не набрал баллы</p>
+                                )}
+                            </div>
+                        )}
+
                         {timeLeft === 0 && (
                             <button
                                 onClick={handleNextQuestion}
-                                className="rounded-full bg-indigo-600 px-12 py-4 text-xl font-bold text-white shadow-lg hover:bg-indigo-700 transition-transform hover:-translate-y-1"
+                                className="mt-auto w-full rounded-2xl bg-indigo-600 py-5 text-xl font-bold text-white shadow-lg hover:bg-indigo-700 transition-transform hover:-translate-y-1"
                             >
-                                Следующий вопрос
+                                Следующий вопрос →
                             </button>
                         )}
                     </div>
                 )}
             </main>
-
         </div>
     );
 };
