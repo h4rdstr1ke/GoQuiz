@@ -56,7 +56,7 @@ export const Quiz = () => {
         if (!lastMessage) return;
 
         switch (lastMessage.type) {
-            case 'question_show':
+            case 'question_show': {
                 const payload = lastMessage.payload;
                 
                 const optionsWithColors: Option[] = payload.options.map((opt: any, index: number) => ({
@@ -65,9 +65,12 @@ export const Quiz = () => {
                     color: COLORS[index % COLORS.length]
                 }));
 
-                setQuestionNumber(prev => prev + 1);
+                // Если сервер передал индекс, берем его, иначе fallback
+                const qIdx = payload.question_index !== undefined ? payload.question_index : questionNumber;
+
+                setQuestionNumber(qIdx);
                 setCurrentQuestion({
-                    number: questionNumber + 1, 
+                    number: qIdx + 1, 
                     text: payload.question_text,
                     options: optionsWithColors
                 });
@@ -79,9 +82,39 @@ export const Quiz = () => {
                 setAnsweredPlayers([]);
                 setTotalParticipants(payload.total_participants || 0);
                 break;
+            }
+
+            case 'game_state': {
+                // Моментальное восстановление сессии при переподключении
+                const payload = lastMessage.payload;
+                const optionsWithColors: Option[] = payload.options.map((opt: any, index: number) => ({
+                    id: opt.id,
+                    text: opt.text,
+                    color: COLORS[index % COLORS.length]
+                }));
+
+                setQuestionNumber(payload.question_index);
+                setCurrentQuestion({
+                    number: payload.question_index + 1,
+                    text: payload.question_text,
+                    options: optionsWithColors
+                });
+                
+                setTimeLeft(payload.time_limit || 0); 
+                
+                if (payload.has_answered) {
+                    setSelectedOption('reconnected'); // Блокируем кнопки, если игрок уже отвечал
+                } else {
+                    setSelectedOption(null); 
+                }
+                
+                setTotalParticipants(payload.total_participants || 0);
+                if (payload.leaderboard) setLeaderboard(payload.leaderboard);
+                if (payload.answered_players) setAnsweredPlayers(payload.answered_players);
+                break;
+            }
 
             case 'player_answered':
-                
                 const { username, leaderboard: newLeaderboard } = lastMessage.payload;
                 
                 setAnsweredPlayers(prev => {
@@ -107,6 +140,8 @@ export const Quiz = () => {
                 break;
 
             case 'game_completed':
+                localStorage.removeItem('currentRoomCode');
+                
                 // Переход на финальную таблицу лидеров
                 if (lastMessage.payload) {
                     setLeaderboard(lastMessage.payload);
@@ -316,7 +351,7 @@ export const Quiz = () => {
                                 : 'bg-gray-400 hover:bg-gray-500'
                             }`}
                         >
-                            {timeLeft === 0 ? 'Следующий вопрос →' : 'Пропустить таймер'}
+                            {timeLeft === 0 ? 'Следующий вопрос →' : 'Пропустить таймер ⏩'}
                         </button>
                     </div>
                 )}

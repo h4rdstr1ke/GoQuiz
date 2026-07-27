@@ -33,6 +33,11 @@ type Room struct {
 	CurrentQuestionIndex int
 	Scores               map[string]int
 
+	// Трекинг ответивших для защиты от двойных ответов и отправки game_state
+	Answered map[string]bool
+	// Время начала текущего вопроса для синхронизации таймера
+	QuestionStartedAt time.Time
+
 	// Каналы для управления состоянием комнаты
 	Register   chan *Client
 	Unregister chan *Client
@@ -48,6 +53,7 @@ func NewRoom(roomCode string, quizID string, manager *Manager) *Room {
 		Manager:              manager,
 		Clients:              make(map[*Client]bool),
 		Scores:               make(map[string]int),
+		Answered:             make(map[string]bool),
 		CurrentQuestionIndex: -1, // -1 означает что игра еще не началась
 		Register:             make(chan *Client),
 		Unregister:           make(chan *Client),
@@ -75,6 +81,65 @@ func (r *Room) Run() {
 			// Рассылаем всем актуальный список
 			r.sendPlayersList()
 
+			// --- ВОССТАНОВЛЕНИЕ СЕССИИ (С СИНХРОНИЗАЦИЕЙ ТАЙМЕРА) ---
+			if r.CurrentQuestionIndex >= 0 && r.CurrentQuestionIndex < len(r.Questions) {
+				q := r.Questions[r.CurrentQuestionIndex]
+
+				type SafeOption struct {
+					ID   string `json:"id"`
+					Text string `json:"text"`
+				}
+
+				var safeOptions []SafeOption
+				for _, opt := range q.Options {
+					safeOptions = append(safeOptions, SafeOption{
+						ID:   opt.ID.String(),
+						Text: opt.OptionText,
+					})
+				}
+
+				participantsCount := 0
+				for c := range r.Clients {
+					if c.Role != "organizer" && c.Role != "Organizer" {
+						participantsCount++
+					}
+				}
+
+				var answeredPlayers []string
+				for name := range r.Answered {
+					answeredPlayers = append(answeredPlayers, name)
+				}
+
+				// СИНХРОНИЗАЦИЯ ТАЙМЕРА
+				timeLeft := q.TimeLimitSeconds - int(time.Since(r.QuestionStartedAt).Seconds())
+				if timeLeft < 0 {
+					timeLeft = 0
+				}
+
+				reconnectMsg := Message{
+					Type: EventGameState,
+					Payload: map[string]interface{}{
+						"question_index":     r.CurrentQuestionIndex,
+						"question_text":      q.ContentText,
+						"options":            safeOptions,
+						"time_limit":         timeLeft, // Передаем оставшееся время
+						"total_participants": participantsCount,
+						"leaderboard":        r.Scores,
+						"answered_players":   answeredPlayers,
+						"has_answered":       r.Answered[client.Username],
+					},
+				}
+				if msgBytes, err := json.Marshal(reconnectMsg); err == nil {
+					client.Send <- msgBytes
+				}
+			} else if r.CurrentQuestionIndex >= len(r.Questions) && len(r.Questions) > 0 {
+				endMsg, _ := json.Marshal(Message{
+					Type:    EventGameCompleted,
+					Payload: r.Scores,
+				})
+				client.Send <- endMsg
+			}
+
 		case client := <-r.Unregister:
 			if _, ok := r.Clients[client]; ok {
 				delete(r.Clients, client)
@@ -97,6 +162,7 @@ func (r *Room) Run() {
 					continue
 				}
 				r.CurrentQuestionIndex = 0
+				r.Answered = make(map[string]bool) // Сбрасываем ответы
 
 				// Отправляем всем сообщение о старте и сразу первый вопрос
 				r.broadcastJSON(Message{Type: EventGameStarted})
@@ -108,6 +174,8 @@ func (r *Room) Run() {
 					continue
 				}
 				r.CurrentQuestionIndex++
+				r.Answered = make(map[string]bool) // Сбрасываем ответы для нового вопроса
+
 				if r.CurrentQuestionIndex >= len(r.Questions) {
 					// --- СОХРАНЕНИЕ ИСТОРИИ ---
 					quizUUID, _ := uuid.Parse(r.QuizID)
@@ -187,6 +255,11 @@ func (r *Room) Run() {
 					continue
 				}
 
+				// Блокируем двойные ответы
+				if r.Answered[cMsg.Client.Username] {
+					continue
+				}
+
 				// Т.к. Payload у нас interface{}, нужно перегнать его в нашу структуру SubmitAnswerPayload
 				// через повторный Marshal/Unmarshal
 				payloadBytes, err := json.Marshal(cMsg.Message.Payload)
@@ -200,6 +273,8 @@ func (r *Room) Run() {
 					log.Printf("Ошибка парсинга ответа от %s: %v", cMsg.Client.Username, err)
 					continue
 				}
+
+				r.Answered[cMsg.Client.Username] = true // Помечаем как ответившего
 
 				// Достаем текущий вопрос
 				q := r.Questions[r.CurrentQuestionIndex]
@@ -288,6 +363,8 @@ func (r *Room) sendCurrentQuestion() {
 		return
 	}
 
+	r.QuestionStartedAt = time.Now() // Фиксируем точное время запуска вопроса
+
 	q := r.Questions[r.CurrentQuestionIndex]
 
 	// Собираем чистый объект вопроса для рассылки
@@ -315,6 +392,7 @@ func (r *Room) sendCurrentQuestion() {
 	r.broadcastJSON(Message{
 		Type: EventQuestionShow,
 		Payload: map[string]interface{}{
+			"question_index":     r.CurrentQuestionIndex,
 			"question_text":      q.ContentText,
 			"options":            safeOptions,
 			"time_limit":         q.TimeLimitSeconds,

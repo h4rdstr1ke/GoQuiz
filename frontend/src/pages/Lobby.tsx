@@ -39,6 +39,13 @@ export const Lobby = () => {
     useEffect(() => {
         if (!lastMessage) return;
 
+        // Если игра началась ИЛИ мы получили состояние для восстановления — уходим из Лобби
+        if (['game_started', 'question_show', 'game_state'].includes(lastMessage.type)) {
+            // REPLACE: TRUE — Стирает Лобби из истории браузера! Кнопка "назад" вернет в Dashboard
+            navigate(`/quiz/${roomCode}?role=${role}`, { replace: true });
+            return;
+        }
+
         switch (lastMessage.type) {
             case 'players_list':
                 // Сервер присылает готовый массив всех игроков, мы просто сохраняем его
@@ -47,11 +54,6 @@ export const Lobby = () => {
                     name: p.username
                 }));
                 setPlayers(updatedPlayers);
-                break;
-
-            case 'game_started':
-            case 'question_show': // Защита: переходим при любом из этих событий, чтобы никого не оставило в лобби
-                navigate(`/quiz/${roomCode}?role=${role}`);
                 break;
         }
     }, [lastMessage, navigate, roomCode, role]);

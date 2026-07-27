@@ -19,6 +19,8 @@ const (
 
 	EventLeaderboardUpdate EventType = "leaderboard_update"
 	EventPlayerAnswered    EventType = "player_answered"
+
+	EventGameState EventType = "game_state"
 )
 
 // Универсальная обертка для всех WebSocket сообщений

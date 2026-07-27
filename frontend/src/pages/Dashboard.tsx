@@ -6,7 +6,6 @@ type Role = 'organizer' | 'participant';
 interface Quiz {
     id: string;
     title: string;
-    // Бэкенд может не возвращать количество вопросов сразу
     questionsCount?: number; 
 }
 
@@ -17,7 +16,6 @@ interface HistoryItem {
     played_at: string;
 }
 
-// Новый интерфейс для истории организатора
 interface OrganizerHistoryItem {
     quiz_title: string;
     room_code: string;
@@ -28,12 +26,14 @@ export const Dashboard = () => {
     const [role] = useState<Role>((localStorage.getItem('role') as Role) || 'participant'); 
     const [roomCode, setRoomCode] = useState('');
     
+    const [activeRoomCode, setActiveRoomCode] = useState<string | null>(localStorage.getItem('currentRoomCode'));
+    
     // Состояния данных
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [organizerHistory, setOrganizerHistory] = useState<OrganizerHistoryItem[]>([]);
     
-    // Переключатель вкладок для организатора
+    // Переключатель вкладок
     const [activeTab, setActiveTab] = useState<'quizzes' | 'history'>('quizzes');
     
     // Состояния загрузки и ошибок API
@@ -108,7 +108,9 @@ export const Dashboard = () => {
     const handleJoinRoom = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (roomCode.trim().length > 0) {
-            navigate(`/lobby/${roomCode}?role=participant`);
+            // Запоминаем код комнаты при входе
+            localStorage.setItem('currentRoomCode', roomCode);
+            navigate(`/lobby/${roomCode}?role=${role}`);
         }
     };
 
@@ -138,6 +140,8 @@ export const Dashboard = () => {
             const data = await response.json();
             
             if (data.room_code) {
+                // Запоминаем код комнаты при создании
+                localStorage.setItem('currentRoomCode', data.room_code);
                 navigate(`/lobby/${data.room_code}?role=organizer`);
             }
         } catch (err) {
@@ -145,6 +149,13 @@ export const Dashboard = () => {
             setError('Не удалось запустить игру. Проверьте подключение к серверу.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // --- НОВОЕ: Обработчик для кнопки "Перейти" в активную игру ---
+    const handleResumeGame = () => {
+        if (activeRoomCode) {
+            navigate(`/lobby/${activeRoomCode}?role=${role}`);
         }
     };
 
@@ -157,8 +168,7 @@ export const Dashboard = () => {
         <div className="min-h-screen bg-gray-100 p-8 font-sans">
             <div className="mx-auto max-w-5xl">
 
-                {/* Шапка */}
-                <header className="mb-10 flex items-center justify-between rounded-xl bg-white p-6 shadow-sm">
+                <header className="mb-8 flex items-center justify-between rounded-xl bg-white p-6 shadow-sm">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900">Личный кабинет</h1>
                         <p className="text-gray-500">
@@ -173,13 +183,30 @@ export const Dashboard = () => {
                     </button>
                 </header>
 
-                {/* Основной контент */}
+                {/* --- НОВОЕ: Плашка активной игры, если она есть --- */}
+                {activeRoomCode && (
+                    <div className="mb-8 flex items-center justify-between rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white shadow-lg">
+                        <div>
+                            <h2 className="text-2xl font-bold">У вас есть активная игра!</h2>
+                            <p className="mt-1 opacity-90 text-indigo-100">
+                                Код комнаты: <span className="font-mono font-bold text-white text-lg tracking-wider">{activeRoomCode}</span>
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleResumeGame}
+                            className="rounded-xl bg-white px-8 py-3 text-lg font-bold text-indigo-600 shadow-sm transition-transform hover:scale-105 hover:bg-gray-50 hover:shadow-md"
+                        >
+                            Перейти →
+                        </button>
+                    </div>
+                )}
+
                 <div className="grid gap-8 md:grid-cols-2">
 
-                    {/* Левая колонка: Основное действие */}
-                    <section className="rounded-xl bg-white p-6 shadow-sm">
-                        {role === 'organizer' ? (
-                            <div>
+                    <section className="flex flex-col gap-8 rounded-xl bg-white p-6 shadow-sm">
+                        
+                        {role === 'organizer' && (
+                            <div className="border-b border-gray-100 pb-8">
                                 <h2 className="mb-4 text-xl font-semibold">Управление квизами</h2>
                                 <p className="mb-6 text-gray-600">Создавайте новые игры и управляйте уже существующими.</p>
                                 <button
@@ -190,27 +217,32 @@ export const Dashboard = () => {
                                     Создать новый квиз
                                 </button>
                             </div>
-                        ) : (
-                            <div>
-                                <h2 className="mb-4 text-xl font-semibold">Подключиться к игре</h2>
-                                <p className="mb-6 text-gray-600">Введите 6-значный код комнаты, который выдал организатор.</p>
-                                <form onSubmit={handleJoinRoom} className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={roomCode}
-                                        onChange={(e) => setRoomCode(e.target.value)}
-                                        placeholder="Например: 839402"
-                                        className="flex-1 rounded-lg border border-gray-300 px-4 py-3 text-lg font-mono focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="rounded-lg bg-green-600 px-6 py-3 text-white font-medium hover:bg-green-700 transition-colors"
-                                    >
-                                        Войти
-                                    </button>
-                                </form>
-                            </div>
                         )}
+
+                        <div>
+                            <h2 className="mb-4 text-xl font-semibold">
+                                Подключиться вручную
+                            </h2>
+                            <p className="mb-6 text-gray-600">
+                                Введите 6-значный код комнаты, чтобы присоединиться к другой игре.
+                            </p>
+                            <form onSubmit={handleJoinRoom} className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={roomCode}
+                                    onChange={(e) => setRoomCode(e.target.value)}
+                                    placeholder="Например: 839402"
+                                    className="flex-1 rounded-lg border border-gray-300 px-4 py-3 text-lg font-mono focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                />
+                                <button
+                                    type="submit"
+                                    className="rounded-lg bg-green-600 px-6 py-3 text-white font-medium hover:bg-green-700 transition-colors"
+                                >
+                                    Войти
+                                </button>
+                            </form>
+                        </div>
+                        
                     </section>
 
                     {/* Правая колонка: Список квизов или история */}
